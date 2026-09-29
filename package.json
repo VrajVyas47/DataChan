@@ -1,0 +1,29 @@
+{
+  "name": "data-chan",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DATA-CHAN: Virtual Database Lab - Learn By Building And Learn By Querying",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:api": "npm run dev --workspace=apps/api",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "keywords": [
+    "mongodb",
+    "database-lab",
+    "virtual-database",
+    "mql-playground",
+    "education",
+    "nextjs",
+    "typescript"
+  ],
+  "author": "Data-Chan Team",
+  "license": "MIT"
+}
