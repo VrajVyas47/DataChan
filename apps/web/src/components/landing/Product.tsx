@@ -36,7 +36,7 @@ export function Product() {
   { "name": 1, "department": 1, "gpa": 1, "_id": 0 }
 ).sort({ "gpa": -1 }).limit(3)`,
       output: `[
-  { "name": "Jay Patel", "department": "CS", "gpa": 3.92 },
+  { "name": "Vraj Patel", "department": "CS", "gpa": 3.92 },
   { "name": "Ananya Roy", "department": "CS", "gpa": 3.85 },
   { "name": "Rohit Verma", "department": "CS", "gpa": 3.71 }
 ]`,

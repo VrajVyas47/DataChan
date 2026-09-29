@@ -133,7 +133,7 @@ export interface CustomThemeColors {
   surface?: string;
 }
 
-export type NavPosition = 'bottom' | 'top' | 'left';
+export type NavPosition = 'bottom' | 'top' | 'left' | 'right';
 
 interface ThemeContextType {
   // Level 1: Mode
@@ -254,7 +254,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
     // Load nav position preference
     const savedNavPos = localStorage.getItem('datachan_nav_pos') as NavPosition;
-    if (savedNavPos && ['bottom', 'top', 'left'].includes(savedNavPos)) {
+    if (savedNavPos && ['bottom', 'top', 'left', 'right'].includes(savedNavPos)) {
       setNavPositionState(savedNavPos);
     } else {
       setNavPositionState('bottom');

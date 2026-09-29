@@ -195,8 +195,33 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
 
     // 2. Generic development user credential validation
     if (password === demoPassword || password === 'DataChan@2026!') {
-      const uid = `usr_${email.replace(/[^a-zA-Z0-9]/g, '_')}`;
-      const displayName = email.split('@')[0];
+      let uid = `usr_${email.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      let displayName = email.split('@')[0];
+      let xp = 100;
+      let level = 2;
+      let streakDays = 1;
+
+      const lowerEmail = email.toLowerCase().trim();
+      if (lowerEmail === 'fresh@data-chan.edu') {
+        uid = 'fresh_onboard';
+        displayName = 'Fresh Onboard';
+        xp = 0;
+        level = 1;
+        streakDays = 1;
+      } else if (lowerEmail === 'sharma@faculty.data-chan.edu') {
+        uid = 'prof_sharma';
+        displayName = 'Professor Sharma';
+        xp = 3200;
+        level = 32;
+        streakDays = 42;
+      } else if (lowerEmail === 'vraj@data-chan.edu') {
+        uid = 'vraj_dev';
+        displayName = 'Vraj';
+        xp = 1850;
+        level = 19;
+        streakDays = 14;
+      }
+
       const token = `token_${uid}`;
 
       const db = getPlatformDb();
@@ -206,11 +231,11 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
           id: uid,
           firebaseUid: uid,
           email,
-          username: displayName,
+          username: displayName.toLowerCase().replace(/\s+/g, '_'),
           displayName,
-          xp: 100,
-          level: 2,
-          streakDays: 1,
+          xp,
+          level,
+          streakDays,
           createdAt: new Date(),
           updatedAt: new Date(),
         });
@@ -223,7 +248,7 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
           id: uid,
           email,
           displayName,
-          username: displayName,
+          username: displayName.toLowerCase().replace(/\s+/g, '_'),
         },
       });
       return;

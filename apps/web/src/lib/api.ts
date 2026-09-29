@@ -18,13 +18,16 @@ import {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
 
+export interface DevUserIdentity {
+  uid: string;
+  email: string;
+  name: string;
+  role?: string;
+}
+
 class ApiClient {
   private token: string | null = null;
-  private devUser = {
-    uid: 'student_jay_demo',
-    email: 'jay@data-chan.edu',
-    name: 'Jay',
-  };
+  private devUser: DevUserIdentity | null = null;
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -33,9 +36,22 @@ class ApiClient {
       if (savedUser) {
         try {
           this.devUser = JSON.parse(savedUser);
-        } catch {}
+        } catch {
+          this.devUser = null;
+        }
       }
     }
+  }
+
+  public isAuthenticated(): boolean {
+    if (typeof window === 'undefined') return false;
+    const token = this.token || localStorage.getItem('datachan_token');
+    const user = this.devUser || localStorage.getItem('datachan_dev_user');
+    return !!(token && user);
+  }
+
+  public getToken(): string | null {
+    return this.token;
   }
 
   public setToken(token: string | null) {
@@ -46,16 +62,17 @@ class ApiClient {
     }
   }
 
-  public setDevUser(uid: string, email: string, name: string) {
-    this.devUser = { uid, email, name };
+  public setDevUser(uid: string, email: string, name: string, role?: string) {
+    this.devUser = { uid, email, name, role };
     if (typeof window !== 'undefined') {
       localStorage.setItem('datachan_dev_user', JSON.stringify(this.devUser));
     }
   }
 
-  public getDevUser() {
+  public getDevUser(): DevUserIdentity | null {
     return this.devUser;
   }
+
 
   public logout() {
     this.token = null;
@@ -112,7 +129,7 @@ class ApiClient {
 
     if (this.token) {
       headers['Authorization'] = `Bearer ${this.token}`;
-    } else {
+    } else if (this.devUser) {
       // In dev mode, send dev headers
       headers['x-dev-uid'] = this.devUser.uid;
       headers['x-dev-email'] = this.devUser.email;

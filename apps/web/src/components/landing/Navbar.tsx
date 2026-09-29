@@ -45,7 +45,7 @@ export function Navbar() {
           Sign In
         </Link>
         <Link
-          href="/dashboard"
+          href="/login"
           className="px-4 py-2 rounded-full bg-white text-black hover:bg-white/90 text-[12px] font-montserrat font-semibold transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
         >
           <span>Request Access</span>

@@ -33,7 +33,7 @@ export function FinalCTA() {
         {/* Primary CTA Button */}
         <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
           <Link
-            href="/dashboard"
+            href="/login"
             className="px-8 py-4 rounded-full bg-white text-black hover:bg-white/90 text-xs font-montserrat font-bold tracking-widest uppercase transition-all shadow-xl active:scale-95 flex items-center gap-2"
           >
             <span>REQUEST ACCESS</span>

@@ -17,6 +17,8 @@ import {
   PanelBottom,
   PanelTop,
   PanelLeft,
+  PanelRight,
+  Users,
   Sun,
   Moon,
   Check,
@@ -42,7 +44,7 @@ export default function SettingsPage() {
   const [displayName, setDisplayName] = useState('');
   const [savedNotice, setSavedNotice] = useState(false);
 
-  const [devUser, setDevUser] = useState({ uid: '', email: '', name: '' });
+  const [devUser, setDevUser] = useState<{ uid?: string; email?: string; name?: string; role?: string } | null>(null);
 
   useEffect(() => {
     setDevUser(api.getDevUser());
@@ -63,11 +65,41 @@ export default function SettingsPage() {
     }
   }
 
-  function handleSwitchDevUser(name: string, email: string) {
-    const uid = `usr_${name.toLowerCase()}_${Date.now()}`;
-    api.setDevUser(uid, email, name);
+  async function handleSwitchDevUser(id: string, name: string, email: string, role?: string) {
+    api.setDevUser(id, email, name, role);
+    api.setToken(`token_${id}`);
+    try {
+      await api.syncUser({ displayName: name });
+    } catch {}
     window.location.reload();
   }
+
+  const demoPersonas = [
+    {
+      id: 'fresh_onboard',
+      name: 'Fresh Onboard',
+      email: 'fresh@data-chan.edu',
+      role: 'Newly Onboarded Student',
+      desc: '0 XP, fresh sandbox, empty collections. Ideal for testing onboarding.',
+      avatar: '🌱',
+    },
+    {
+      id: 'prof_sharma',
+      name: 'Professor Sharma',
+      email: 'sharma@faculty.data-chan.edu',
+      role: 'CS Faculty / Instructor',
+      desc: '3,200 XP, 42-day streak. Faculty review view with grading access.',
+      avatar: '🎓',
+    },
+    {
+      id: 'vraj_dev',
+      name: 'Vraj',
+      email: 'vraj@data-chan.edu',
+      role: 'Student / Lead Developer',
+      desc: '1,850 XP, 14-day streak. Active CollegeDB workspace with verified sandboxes.',
+      avatar: '👨‍💻',
+    },
+  ];
 
   const colorPresets = [
     { name: 'Royal Violet', hex: '#7c3aed' },
@@ -280,7 +312,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
           <button
             onClick={() => setNavPosition('bottom')}
             className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 text-center transition-all ${
@@ -291,9 +323,9 @@ export default function SettingsPage() {
           >
             <PanelBottom className="w-6 h-6 text-primary" />
             <div>
-              <div className="text-xs font-bold text-text">Bottom Floating Dock (Recommended)</div>
+              <div className="text-xs font-bold text-text">Bottom Dock (Recommended)</div>
               <div className="text-[10px] text-text-muted mt-0.5">
-                Modern macOS-style dock floating at bottom center
+                Modern dock floating at bottom center
               </div>
             </div>
           </button>
@@ -310,7 +342,24 @@ export default function SettingsPage() {
             <div>
               <div className="text-xs font-bold text-text">Top Command Bar</div>
               <div className="text-[10px] text-text-muted mt-0.5">
-                Classic header command navigation at the top
+                Classic header navigation at the top
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => setNavPosition('right')}
+            className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 text-center transition-all ${
+              navPosition === 'right'
+                ? 'border-primary bg-primary/5 font-bold shadow-sm'
+                : 'border-border bg-surface-high hover:border-primary/40'
+            }`}
+          >
+            <PanelRight className="w-6 h-6 text-primary" />
+            <div>
+              <div className="text-xs font-bold text-text">Right Side Dock</div>
+              <div className="text-[10px] text-text-muted mt-0.5">
+                Vertical command dock on right viewport edge
               </div>
             </div>
           </button>
@@ -327,7 +376,7 @@ export default function SettingsPage() {
             <div>
               <div className="text-xs font-bold text-text">Left Sidebar Dock</div>
               <div className="text-[10px] text-text-muted mt-0.5">
-                Compact vertical icon dock pinned to the left edge
+                Vertical command dock on left viewport edge
               </div>
             </div>
           </button>
@@ -368,37 +417,47 @@ export default function SettingsPage() {
         </form>
       </div>
 
-      {/* 4. Developer / Student Identity Switcher */}
+      {/* 4. Switch User / Development Identity Switcher */}
       <div className="bg-surface rounded-3xl p-6 border border-border shadow-sm flex flex-col gap-4">
         <div className="flex items-center gap-2 pb-2 border-b border-border">
-          <Shield className="w-5 h-5 text-emerald-500" />
+          <Users className="w-5 h-5 text-emerald-500" />
           <div>
-            <h3 className="text-sm font-bold text-text">Lab Development Identity</h3>
+            <h3 className="text-sm font-bold text-text">Switch User</h3>
             <span className="text-xs text-text-muted">
-              Switch test personas to evaluate workspace isolation across different students.
+              Select an authorized development identity to switch active user context, XP, and workspace.
             </span>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2 pt-2">
-          <button
-            onClick={() => handleSwitchDevUser('Jay', 'jay@data-chan.edu')}
-            className="px-4 py-2 rounded-full bg-surface-high hover:bg-surface border border-border text-xs font-medium text-text transition-all"
-          >
-            Switch to Jay (Default)
-          </button>
-          <button
-            onClick={() => handleSwitchDevUser('Alice', 'alice@data-chan.edu')}
-            className="px-4 py-2 rounded-full bg-surface-high hover:bg-surface border border-border text-xs font-medium text-text transition-all"
-          >
-            Switch to Alice
-          </button>
-          <button
-            onClick={() => handleSwitchDevUser('Professor_Lee', 'lee@faculty.data-chan.edu')}
-            className="px-4 py-2 rounded-full bg-surface-high hover:bg-surface border border-border text-xs font-medium text-text transition-all"
-          >
-            Switch to Professor Lee
-          </button>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+          {demoPersonas.map((persona) => {
+            const isCurrent = devUser?.email?.toLowerCase() === persona.email.toLowerCase();
+            return (
+              <button
+                key={persona.id}
+                onClick={() => handleSwitchDevUser(persona.id, persona.name, persona.email, persona.role)}
+                className={`p-4 rounded-2xl border text-left flex flex-col gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] ${
+                  isCurrent
+                    ? 'border-primary bg-primary/10 ring-2 ring-primary/40'
+                    : 'border-border bg-surface-high hover:border-primary/40'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-2xl">{persona.avatar}</span>
+                  {isCurrent && (
+                    <span className="px-2 py-0.5 rounded-full bg-primary text-white text-[10px] font-bold">
+                      Active
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-text">{persona.name}</div>
+                  <div className="text-[10px] text-text-muted font-mono">{persona.email}</div>
+                  <div className="text-[11px] text-text-muted mt-1 leading-snug">{persona.desc}</div>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 

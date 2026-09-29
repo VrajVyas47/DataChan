@@ -68,9 +68,18 @@ export function createFloatingShapes(count = 35): FloatingShapesField {
     const scale = Math.random() * 1.8 + 0.6;
     mesh.scale.set(scale, scale, scale);
 
-    const x = (Math.random() - 0.5) * 14;
-    const y = (Math.random() - 0.5) * 10;
-    const z = (Math.random() - 0.5) * 8 - 1.5;
+    let x = (Math.random() - 0.5) * 14;
+    let y = (Math.random() - 0.5) * 10;
+    let z = (Math.random() - 0.5) * 8 - 1.5;
+
+    // Preserve quiet zone over the left hero headline (x: -3.0 to 0.1, y: -1.2 to 1.8)
+    if (x > -3.0 && x < 0.2 && y > -1.2 && y < 1.8) {
+      if (Math.random() > 0.4) {
+        x += 2.2; // Push to right side
+      } else {
+        z -= 3.5; // Push deep into atmospheric background
+      }
+    }
 
     mesh.position.set(x, y, z);
     group.add(mesh);

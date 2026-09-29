@@ -1,15 +1,28 @@
 'use client';
 
-import React from 'react';
-import { usePathname } from 'next/navigation';
+import React, { useEffect, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { TopCommandNav } from '@/components/navigation/TopCommandNav';
 import { useTheme } from '@/lib/theme';
+import { api } from '@/lib/api';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { navPosition } = useTheme();
+  const [authChecked, setAuthChecked] = useState(false);
 
   const isPublicPage = pathname === '/' || pathname === '/login';
+
+  useEffect(() => {
+    if (!isPublicPage) {
+      if (!api.isAuthenticated()) {
+        router.push('/login');
+        return;
+      }
+    }
+    setAuthChecked(true);
+  }, [pathname, isPublicPage, router]);
 
   if (isPublicPage) {
     return (
@@ -19,11 +32,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // Prevent flashing protected dashboard while redirecting unauthenticated user
+  if (!authChecked && !api.isAuthenticated()) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-background text-text">
+        <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
   // Padding classes depending on dock position
   const paddingClasses = {
     bottom: 'pt-4 sm:pt-6 pb-24 md:pb-28',
     top: 'pt-20 sm:pt-24 pb-6',
-    left: 'pl-24 sm:pl-28 py-4 sm:py-6 pr-4',
+    left: 'pl-20 sm:pl-28 py-4 sm:py-6 pr-4',
+    right: 'pr-20 sm:pr-28 py-4 sm:py-6 pl-4',
   };
 
   return (

@@ -43,7 +43,7 @@ export function Hero() {
           {/* Action CTAs */}
           <div className="mt-8 flex flex-wrap items-center gap-4">
             <Link
-              href="/dashboard"
+              href="/login"
               className="px-7 py-3.5 rounded-full bg-white text-black hover:bg-white/90 text-xs font-montserrat font-bold tracking-wide transition-all shadow-md active:scale-95 flex items-center gap-2"
             >
               <span>REQUEST ACCESS</span>
