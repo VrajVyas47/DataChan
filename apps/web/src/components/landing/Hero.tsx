@@ -11,7 +11,7 @@ export function Hero() {
       className="min-h-screen w-full max-w-7xl mx-auto px-6 pt-32 pb-20 flex flex-col justify-center relative z-10 pointer-events-none"
     >
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-        {/* Left Editorial Content (Takes 6 cols, letting 3D particle brain shine on the right) */}
+        {/* Left Editorial Content (Takes 6 cols, letting 3D database physical architecture shine on the right) */}
         <div className="lg:col-span-7 flex flex-col justify-center pointer-events-auto">
           {/* Eyebrow Label */}
           <div className="flex items-center gap-2 mb-6">
@@ -77,7 +77,7 @@ export function Hero() {
           </div>
         </div>
 
-        {/* Right side is intentionally open for the 3D WebGL particle brain */}
+        {/* Right side is intentionally open for the 3D WebGL database core */}
         <div className="lg:col-span-5 h-[360px] lg:h-[600px] pointer-events-none" />
       </div>
     </section>

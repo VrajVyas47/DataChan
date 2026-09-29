@@ -1,11 +1,14 @@
 import { Router } from 'express';
-import { getMe, syncUser } from './authController';
+import { getMe, syncUser, login } from './authController';
 import { authMiddleware } from '../../middleware/auth';
 
 const router = Router();
 
-router.use(authMiddleware);
+// Public auth endpoints
+router.post('/login', login);
 
+// Authenticated auth endpoints
+router.use(authMiddleware);
 router.get('/me', getMe);
 router.post('/sync', syncUser);
 

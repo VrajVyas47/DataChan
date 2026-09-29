@@ -353,7 +353,37 @@ export type ThemeId =
   | 'midnight-dark'
   | 'ocean-blue'
   | 'mint-lab'
-  | 'sunset-amber';
+  | 'sunset-amber'
+  | 'light-neutral'
+  | 'light-ocean'
+  | 'light-violet'
+  | 'light-mint'
+  | 'light-amber'
+  | 'dark-neutral'
+  | 'dark-ocean'
+  | 'dark-violet'
+  | 'dark-mint'
+  | 'dark-amber';
+
+export type ThemeMode = 'light' | 'dark';
+export type ColorPaletteId = 'neutral' | 'ocean' | 'violet' | 'mint' | 'amber';
+
+export interface PaletteSwatches {
+  background: string;
+  surface: string;
+  accent: string;
+  text: string;
+}
+
+export interface PaletteOption {
+  id: ColorPaletteId;
+  name: string;
+  description: string;
+  swatches: {
+    light: PaletteSwatches;
+    dark: PaletteSwatches;
+  };
+}
 
 export interface ThemeOption {
   id: ThemeId;
@@ -363,3 +393,4 @@ export interface ThemeOption {
   backgroundHex: string;
   surfaceHex: string;
 }
+

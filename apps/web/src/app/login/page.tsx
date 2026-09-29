@@ -93,21 +93,23 @@ export default function LoginPage() {
       setError('Please provide an email address');
       return;
     }
+    if (!password) {
+      setError('Please enter your password');
+      return;
+    }
     setLoading(true);
     setError(null);
 
     try {
-      const uid = `usr_${email.replace(/[^a-zA-Z0-9]/g, '_')}`;
-      const name = displayName || email.split('@')[0];
-      api.setDevUser(uid, email, name);
-      api.setToken(`token_${uid}`);
-      await api.syncUser({ displayName: name });
+      await api.login(email, password);
+      await api.syncUser({ displayName: displayName || email.split('@')[0] });
       router.push('/dashboard');
     } catch (err: any) {
       setError(err.message || 'Authentication error. Please check your credentials.');
       setLoading(false);
     }
   };
+
 
   return (
     <div className="min-h-screen bg-background text-text flex flex-col justify-center items-center p-4 sm:p-6 relative overflow-hidden">
@@ -261,6 +263,30 @@ export default function LoginPage() {
           {/* TAB 3: EMAIL / PASSWORD FOR DEVELOPERS */}
           {activeTab === 'email' && (
             <form onSubmit={handleEmailAuth} className="flex flex-col gap-3.5">
+              {/* Local Dev Demo Account Banner */}
+              <div className="p-3.5 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-cyan-400">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>Local Development Demo User</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmail(process.env.NEXT_PUBLIC_DEMO_USER_EMAIL || 'demo@data-chan.local');
+                      setPassword(process.env.NEXT_PUBLIC_DEMO_USER_PASSWORD || 'DataChan@2026!');
+                    }}
+                    className="text-[10px] font-bold text-cyan-400 hover:text-cyan-300 underline"
+                  >
+                    Quick Fill
+                  </button>
+                </div>
+                <div className="text-[11px] text-text-muted font-mono leading-tight">
+                  Email: <span className="text-text font-bold">demo@data-chan.local</span><br />
+                  Password: <span className="text-text font-bold">DataChan@2026!</span>
+                </div>
+              </div>
+
               {isRegister && (
                 <div>
                   <label className="text-[11px] font-bold text-text-muted uppercase mb-1 block">

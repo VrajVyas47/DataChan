@@ -17,10 +17,18 @@ import {
   PanelBottom,
   PanelTop,
   PanelLeft,
+  Sun,
+  Moon,
+  Check,
 } from 'lucide-react';
 
 export default function SettingsPage() {
   const {
+    themeMode,
+    setThemeMode,
+    colorPalette,
+    setColorPalette,
+    palettes,
     theme,
     setTheme,
     availableThemes,
@@ -33,6 +41,7 @@ export default function SettingsPage() {
 
   const [displayName, setDisplayName] = useState('');
   const [savedNotice, setSavedNotice] = useState(false);
+
   const [devUser, setDevUser] = useState({ uid: '', email: '', name: '' });
 
   useEffect(() => {
@@ -115,49 +124,107 @@ export default function SettingsPage() {
           )}
         </div>
 
-        {/* Base Theme Cards */}
+        {/* Level 1: Theme Mode (Appearance) */}
         <div>
-          <div className="text-xs font-bold text-text-muted uppercase mb-2">Base Palettes</div>
+          <div className="text-xs font-bold text-text-muted uppercase mb-2">Level 1: Appearance</div>
+          <div className="grid grid-cols-2 gap-2 max-w-xs p-1 bg-surface-high rounded-xl">
+            <button
+              onClick={() => setThemeMode('light')}
+              className={`flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-xs font-bold transition-all ${
+                themeMode === 'light'
+                  ? 'bg-surface text-text shadow-sm'
+                  : 'text-text-muted hover:text-text'
+              }`}
+            >
+              <Sun className="w-4 h-4 text-amber-500" />
+              <span>Light Mode</span>
+            </button>
+            <button
+              onClick={() => setThemeMode('dark')}
+              className={`flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-xs font-bold transition-all ${
+                themeMode === 'dark'
+                  ? 'bg-surface text-text shadow-sm'
+                  : 'text-text-muted hover:text-text'
+              }`}
+            >
+              <Moon className="w-4 h-4 text-violet-400" />
+              <span>Dark Mode</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Level 2: Curated Color Combinations */}
+        <div>
+          <div className="text-xs font-bold text-text-muted uppercase mb-2 flex items-center justify-between">
+            <span>Level 2: Color Combination</span>
+            <span className="text-xs font-mono text-primary font-bold capitalize">
+              Active: {themeMode} · {colorPalette}
+            </span>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {availableThemes.map((t) => {
-              const isSelected = theme === t.id;
+            {palettes.map((p) => {
+              const isSelected = colorPalette === p.id;
+              const sw = p.swatches[themeMode];
               return (
                 <div
-                  key={t.id}
-                  onClick={() => setTheme(t.id)}
+                  key={p.id}
+                  onClick={() => setColorPalette(p.id)}
                   className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between gap-3 ${
                     isSelected
-                      ? 'border-primary bg-surface shadow-md scale-[1.02]'
-                      : 'border-border bg-surface-high hover:border-primary/40'
+                      ? 'border-primary bg-primary/5 shadow-md scale-[1.01]'
+                      : 'border-border bg-surface-high/50 hover:border-primary/40 hover:bg-surface-high'
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-text">{t.name}</span>
-                    {isSelected && <CheckCircle2 className="w-4 h-4 text-primary" />}
+                    <div>
+                      <span className="text-xs font-bold text-text">{p.name}</span>
+                      <p className="text-[11px] text-text-muted mt-0.5 line-clamp-1">{p.description}</p>
+                    </div>
+                    {isSelected && <Check className="w-4 h-4 text-primary shrink-0" />}
                   </div>
 
-                  <div className="flex items-center gap-2 pt-2">
-                    <div
-                      className="w-6 h-6 rounded-full border border-black/10 shadow-sm"
-                      style={{ backgroundColor: t.primaryHex }}
-                      title="Primary Accent"
-                    />
-                    <div
-                      className="w-6 h-6 rounded-full border border-black/10 shadow-sm"
-                      style={{ backgroundColor: t.surfaceHex }}
-                      title="Surface"
-                    />
-                    <div
-                      className="w-6 h-6 rounded-full border border-black/10 shadow-sm"
-                      style={{ backgroundColor: t.backgroundHex }}
-                      title="Background"
-                    />
+                  {/* 4-Swatch Miniature Preview */}
+                  <div className="flex items-center gap-1.5 pt-2 border-t border-border/50">
+                    <div className="flex-1 flex flex-col items-center gap-1">
+                      <div
+                        className="w-full h-5 rounded-md border border-black/10 shadow-xs"
+                        style={{ backgroundColor: sw.background }}
+                        title="Background"
+                      />
+                      <span className="text-[9px] font-mono text-text-muted">BG</span>
+                    </div>
+                    <div className="flex-1 flex flex-col items-center gap-1">
+                      <div
+                        className="w-full h-5 rounded-md border border-black/10 shadow-xs"
+                        style={{ backgroundColor: sw.surface }}
+                        title="Surface"
+                      />
+                      <span className="text-[9px] font-mono text-text-muted">Surface</span>
+                    </div>
+                    <div className="flex-1 flex flex-col items-center gap-1">
+                      <div
+                        className="w-full h-5 rounded-md border border-black/10 shadow-xs"
+                        style={{ backgroundColor: sw.accent }}
+                        title="Accent"
+                      />
+                      <span className="text-[9px] font-mono text-text-muted">Accent</span>
+                    </div>
+                    <div className="flex-1 flex flex-col items-center gap-1">
+                      <div
+                        className="w-full h-5 rounded-md border border-black/10 shadow-xs"
+                        style={{ backgroundColor: sw.text }}
+                        title="Text"
+                      />
+                      <span className="text-[9px] font-mono text-text-muted">Text</span>
+                    </div>
                   </div>
                 </div>
               );
             })}
           </div>
         </div>
+
 
         {/* Dynamic Color Mixer Section */}
         <div className="p-4 rounded-2xl bg-surface-high/60 border border-border flex flex-col gap-3">

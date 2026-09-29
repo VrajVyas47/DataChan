@@ -26,12 +26,20 @@ import {
   PanelLeft,
   Sparkles,
   RotateCcw,
+  Sun,
+  Moon,
+  Check,
 } from 'lucide-react';
 
 export function TopCommandNav() {
   const pathname = usePathname();
   const router = useRouter();
   const {
+    themeMode,
+    setThemeMode,
+    colorPalette,
+    setColorPalette,
+    palettes,
     theme,
     setTheme,
     availableThemes,
@@ -44,6 +52,8 @@ export function TopCommandNav() {
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+  const [popupPlacement, setPopupPlacement] = useState<'up' | 'down'>('up');
+  const themeButtonRef = React.useRef<HTMLButtonElement>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [mongoConnected, setMongoConnected] = useState(true);
 
@@ -54,12 +64,29 @@ export function TopCommandNav() {
       .catch(() => {});
   }, [pathname]);
 
+  const handleToggleThemeMenu = () => {
+    if (!themeMenuOpen && themeButtonRef.current) {
+      const rect = themeButtonRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+
+      // Viewport-aware check:
+      // If dock is at bottom, or space below is less than 440px and space above is larger, open UPWARD
+      if (navPosition === 'bottom' || spaceBelow < 440 || spaceAbove > spaceBelow) {
+        setPopupPlacement('up');
+      } else {
+        setPopupPlacement('down');
+      }
+    }
+    setThemeMenuOpen(!themeMenuOpen);
+  };
+
   const handleLogout = () => {
-    localStorage.removeItem('datachan_auth_token');
-    localStorage.removeItem('datachan_user_id');
+    api.logout();
     setUserMenuOpen(false);
     router.push('/login');
   };
+
 
   const navItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -257,20 +284,26 @@ export function TopCommandNav() {
           {/* Theme & Color Mixer Dropdown */}
           <div className="relative">
             <button
-              onClick={() => setThemeMenuOpen(!themeMenuOpen)}
+              ref={themeButtonRef}
+              onClick={handleToggleThemeMenu}
               className="p-2 rounded-full bg-surface-high hover:bg-surface text-text border border-border/60 transition-colors flex items-center gap-1"
-              title="Change Theme & Mix Colors"
+              title="Change Theme & Color Combination"
             >
               <AnimatedIcon icon={Palette} size={16} className="text-primary" animation="wiggle" />
               <ChevronDown className="w-3 h-3 opacity-60" />
             </button>
 
             {themeMenuOpen && (
-              <div className="absolute right-0 bottom-full mb-3 md:bottom-auto md:top-full md:mt-2 w-72 bg-surface border border-border rounded-2xl shadow-popover p-3 z-50 flex flex-col gap-2.5">
-                <div className="flex items-center justify-between pb-1 border-b border-border">
+              <div
+                className={`absolute right-0 ${
+                  popupPlacement === 'up' ? 'bottom-full mb-3' : 'top-full mt-3'
+                } w-80 max-h-[82vh] overflow-y-auto bg-surface border border-border rounded-2xl shadow-popover p-4 z-[100] flex flex-col gap-3.5 backdrop-blur-md`}
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between pb-2 border-b border-border">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-text uppercase tracking-wider">
                     <Sparkles className="w-3.5 h-3.5 text-primary" />
-                    <span>Theme & Color Mixer</span>
+                    <span>Theme System</span>
                   </div>
                   {customColors.primary && (
                     <button
@@ -284,36 +317,105 @@ export function TopCommandNav() {
                   )}
                 </div>
 
-                {/* Base Themes */}
+                {/* Level 1: Appearance (Mode) */}
                 <div>
                   <div className="text-[10px] font-bold text-text-muted uppercase mb-1.5">
-                    Base Theme
+                    Appearance
                   </div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {availableThemes.map((t) => (
-                      <button
-                        key={t.id}
-                        onClick={() => {
-                          setTheme(t.id);
-                        }}
-                        className={`flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-medium text-left transition-colors border ${
-                          theme === t.id
-                            ? 'bg-primary text-white border-primary font-bold shadow-sm'
-                            : 'bg-surface-high/60 text-text border-border hover:bg-surface-high'
-                        }`}
-                      >
-                        <span className="truncate">{t.name}</span>
-                        <span
-                          className="w-3 h-3 rounded-full border border-black/10 shrink-0"
-                          style={{ backgroundColor: t.primaryHex }}
-                        />
-                      </button>
-                    ))}
+                  <div className="grid grid-cols-2 gap-1.5 p-1 bg-surface-high rounded-xl">
+                    <button
+                      onClick={() => setThemeMode('light')}
+                      className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${
+                        themeMode === 'light'
+                          ? 'bg-surface text-text shadow-sm'
+                          : 'text-text-muted hover:text-text'
+                      }`}
+                    >
+                      <Sun className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Light</span>
+                    </button>
+                    <button
+                      onClick={() => setThemeMode('dark')}
+                      className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${
+                        themeMode === 'dark'
+                          ? 'bg-surface text-text shadow-sm'
+                          : 'text-text-muted hover:text-text'
+                      }`}
+                    >
+                      <Moon className="w-3.5 h-3.5 text-violet-400" />
+                      <span>Dark</span>
+                    </button>
                   </div>
                 </div>
 
-                {/* Color Mixer: Primary Accent Overrides */}
+                {/* Level 2: Color Combination */}
                 <div>
+                  <div className="text-[10px] font-bold text-text-muted uppercase mb-1.5 flex items-center justify-between">
+                    <span>Color Combination</span>
+                    <span className="text-[10px] font-mono text-primary font-semibold capitalize">
+                      {colorPalette}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    {palettes.map((p) => {
+                      const isSelected = colorPalette === p.id;
+                      const sw = p.swatches[themeMode];
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => setColorPalette(p.id)}
+                          className={`flex items-center justify-between p-2 rounded-xl border text-left transition-all ${
+                            isSelected
+                              ? 'bg-primary/10 border-primary text-text font-bold shadow-xs'
+                              : 'bg-surface-high/40 hover:bg-surface-high border-border text-text-muted'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            {/* Miniature Preview with 4 Swatches */}
+                            <div className="flex items-center rounded-md overflow-hidden border border-black/15 shrink-0 shadow-xs">
+                              <span
+                                className="w-3 h-6 block"
+                                style={{ backgroundColor: sw.background }}
+                                title="Background"
+                              />
+                              <span
+                                className="w-3 h-6 block"
+                                style={{ backgroundColor: sw.surface }}
+                                title="Surface"
+                              />
+                              <span
+                                className="w-3 h-6 block"
+                                style={{ backgroundColor: sw.accent }}
+                                title="Accent"
+                              />
+                              <span
+                                className="w-3 h-6 block"
+                                style={{ backgroundColor: sw.text }}
+                                title="Text"
+                              />
+                            </div>
+
+                            <div>
+                              <div className={`text-xs ${isSelected ? 'text-text font-bold' : 'text-text'}`}>
+                                {p.name}
+                              </div>
+                              <div className="text-[10px] text-text-muted line-clamp-1">
+                                {p.description}
+                              </div>
+                            </div>
+                          </div>
+
+                          {isSelected && (
+                            <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-1.5" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Color Mixer: Accent Overrides */}
+                <div className="pt-2 border-t border-border">
                   <div className="text-[10px] font-bold text-text-muted uppercase mb-1.5 flex items-center justify-between">
                     <span>Mix Accent Color</span>
                     <input
@@ -341,6 +443,7 @@ export function TopCommandNav() {
               </div>
             )}
           </div>
+
 
           {/* Settings */}
           <Link

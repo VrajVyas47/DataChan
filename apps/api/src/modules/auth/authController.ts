@@ -140,3 +140,99 @@ export async function syncUser(req: Request, res: Response, next: NextFunction):
     next(err);
   }
 }
+
+export async function login(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      res.status(400).json({ success: false, error: 'Email and password are required' });
+      return;
+    }
+
+    const demoEmail = process.env.DEMO_USER_EMAIL || 'demo@data-chan.local';
+    const demoPassword = process.env.DEMO_USER_PASSWORD || 'DataChan@2026!';
+
+    // 1. Check development demo credentials
+    if (email.trim().toLowerCase() === demoEmail.trim().toLowerCase()) {
+      if (password === demoPassword) {
+        const uid = 'demo_user';
+        const displayName = 'Lead Architect (Demo)';
+        const token = `token_${uid}`;
+
+        const db = getPlatformDb();
+        const existing = await db.collection('users').findOne({ email: demoEmail });
+        if (!existing) {
+          await db.collection('users').insertOne({
+            id: uid,
+            firebaseUid: uid,
+            email: demoEmail,
+            username: 'demo_architect',
+            displayName,
+            xp: 2450,
+            level: 25,
+            streakDays: 7,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+        }
+
+        res.json({
+          success: true,
+          token,
+          user: {
+            id: uid,
+            email: demoEmail,
+            displayName,
+            username: 'demo_architect',
+          },
+        });
+        return;
+      } else {
+        res.status(401).json({ success: false, error: 'Invalid email or password' });
+        return;
+      }
+    }
+
+    // 2. Generic development user credential validation
+    if (password === demoPassword || password === 'DataChan@2026!') {
+      const uid = `usr_${email.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      const displayName = email.split('@')[0];
+      const token = `token_${uid}`;
+
+      const db = getPlatformDb();
+      const existing = await db.collection('users').findOne({ email });
+      if (!existing) {
+        await db.collection('users').insertOne({
+          id: uid,
+          firebaseUid: uid,
+          email,
+          username: displayName,
+          displayName,
+          xp: 100,
+          level: 2,
+          streakDays: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      }
+
+      res.json({
+        success: true,
+        token,
+        user: {
+          id: uid,
+          email,
+          displayName,
+          username: displayName,
+        },
+      });
+      return;
+    }
+
+    // Invalid credentials
+    res.status(401).json({ success: false, error: 'Invalid email or password' });
+  } catch (err) {
+    next(err);
+  }
+}
+
