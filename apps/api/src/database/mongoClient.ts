@@ -1,4 +1,4 @@
-import { MongoClient, Db } from 'mongodb';
+import { MongoClient, MongoClientOptions, Db } from 'mongodb';
 import { config } from '../config';
 import { logger } from '../logging/logger';
 
@@ -10,13 +10,29 @@ export async function connectMongo(): Promise<MongoClient> {
   }
 
   try {
-    logger.info('Connecting to MongoDB...', { uri: config.mongodb.uri });
-    client = new MongoClient(config.mongodb.uri, {
+    const options: MongoClientOptions = {
       maxPoolSize: 20,
       minPoolSize: 2,
       serverSelectionTimeoutMS: 5000,
+    };
+
+    // If explicit user and password are provided and not already embedded in the URI
+    if (config.mongodb.user && config.mongodb.password && !config.mongodb.uri.includes('@')) {
+      options.auth = {
+        username: config.mongodb.user,
+        password: config.mongodb.password,
+      };
+      if (config.mongodb.authSource) {
+        options.authSource = config.mongodb.authSource;
+      }
+    }
+
+    logger.info('Connecting to MongoDB...', {
+      uri: config.mongodb.uri.replace(/:([^:@]{1,})@/, ':****@'), // redact password in logs
+      hasAuth: Boolean(config.mongodb.user || config.mongodb.uri.includes('@')),
     });
 
+    client = new MongoClient(config.mongodb.uri, options);
     await client.connect();
     logger.info('Connected to MongoDB successfully');
     return client;

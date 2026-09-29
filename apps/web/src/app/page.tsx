@@ -4,6 +4,8 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useTheme } from '@/lib/theme';
 import { AnimatedIcon } from '@/components/ui/AnimatedIcon';
+import { DatabaseCylinder3D } from '@/components/ui/DatabaseCylinder3D';
+import { TeamFoundersSection } from '@/components/ui/TeamFoundersSection';
 import {
   Database,
   Terminal,
@@ -21,11 +23,12 @@ import {
   Play,
   Palette,
   ExternalLink,
+  Lock,
 } from 'lucide-react';
 
 export default function LandingPage() {
   const { theme, setTheme, availableThemes } = useTheme();
-  const [activeTab, setActiveTab] = useState<'find' | 'aggregate' | 'update'>('aggregate');
+  const [activeTab, setActiveTab] = useState<'aggregate' | 'find' | 'update'>('aggregate');
 
   const codeSnippets = {
     aggregate: {
@@ -84,13 +87,13 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-background text-text selection:bg-primary selection:text-white relative overflow-hidden pb-24">
-      {/* Dynamic Background Ambient Blobs */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1200px] h-[600px] bg-gradient-to-b from-primary/15 via-secondary/10 to-transparent blur-3xl -z-10 pointer-events-none rounded-full"></div>
-      <div className="absolute top-1/3 -left-48 w-96 h-96 bg-primary/10 rounded-full blur-3xl pointer-events-none"></div>
-      <div className="absolute top-2/3 -right-48 w-96 h-96 bg-secondary/15 rounded-full blur-3xl pointer-events-none"></div>
+      {/* Cinematic Deep Space Glows */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1300px] h-[750px] bg-gradient-to-b from-primary/20 via-cyan-500/10 to-transparent blur-3xl -z-10 pointer-events-none rounded-full"></div>
+      <div className="absolute top-1/3 -left-48 w-[450px] h-[450px] bg-primary/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="absolute top-2/3 -right-48 w-[450px] h-[450px] bg-secondary/15 rounded-full blur-3xl pointer-events-none"></div>
 
-      {/* Top Floating Glass Bar */}
-      <header className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 flex items-center justify-between">
+      {/* Top Floating Glass Header */}
+      <header className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 flex items-center justify-between z-20 relative">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-2xl bg-primary flex items-center justify-center text-white shadow-lg">
             <AnimatedIcon icon={Database} size={22} className="text-white" animation="bounce" />
@@ -106,27 +109,27 @@ export default function LandingPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Theme Quick Switcher */}
-          <div className="hidden sm:flex items-center gap-1 bg-surface border border-border rounded-full p-1 shadow-sm">
-            {availableThemes.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTheme(t.id)}
-                className={`w-5 h-5 rounded-full border transition-transform ${
-                  theme === t.id ? 'ring-2 ring-primary scale-110' : 'opacity-70 hover:opacity-100'
-                }`}
-                style={{ backgroundColor: t.primaryHex }}
-                title={`Switch to ${t.name}`}
-              />
-            ))}
-          </div>
+        <div className="flex items-center gap-4">
+          <nav className="hidden md:flex items-center gap-6 text-xs font-semibold text-text-muted">
+            <a href="#lab-overview" className="hover:text-text transition-colors">
+              Manifesto
+            </a>
+            <a href="#curriculum" className="hover:text-text transition-colors">
+              Curriculum
+            </a>
+            <a href="#team" className="hover:text-text transition-colors">
+              Team
+            </a>
+            <a href="#playground" className="hover:text-text transition-colors">
+              Playground
+            </a>
+          </nav>
 
           <Link
             href="/login"
             className="px-4 py-2 rounded-full bg-surface-high hover:bg-surface-elevated text-text text-xs font-bold border border-border shadow-sm transition-all"
           >
-            Sign In / Personas
+            Sign In
           </Link>
           <Link
             href="/dashboard"
@@ -138,77 +141,112 @@ export default function LandingPage() {
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 pt-16 sm:pt-24 pb-16 text-center">
-        {/* Academic Faculty Badge */}
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface-high border border-border shadow-sm mb-6">
-          <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
-          <span className="text-xs font-semibold text-text">
-            Mandatory MongoDB Curriculum Core · Real Engine Sandboxing
-          </span>
+      {/* HERO SECTION with 3D Animated Database Cylinder */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 pt-12 sm:pt-20 pb-16 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+        {/* Left Column: Bold Headline & Narrative */}
+        <div className="lg:col-span-6 text-left flex flex-col justify-center">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface-high border border-border shadow-sm mb-6 w-fit">
+            <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
+            <span className="text-xs font-semibold text-text">
+              Mandatory MongoDB Subject Core · Local Compass Ready
+            </span>
+          </div>
+
+          <h1 className="text-4xl sm:text-6xl md:text-6xl font-black tracking-tight leading-[1.08] text-text">
+            Unlock collective <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-cyan-400 to-primary">
+              database wisdom.
+            </span>
+          </h1>
+
+          <div className="mt-4 text-xs font-mono font-bold uppercase tracking-widest text-text-muted">
+            STOP FRAGMENTING LEARNING. START BUILDING.
+          </div>
+
+          <p className="mt-4 text-sm sm:text-base text-text-muted font-medium leading-relaxed max-w-xl">
+            Plug into your personal virtual database laboratory. Query isolated MongoDB sandboxes,
+            design schemas with visual ER modeling, and test real database logic with deterministic evaluations.
+          </p>
+
+          <div className="mt-8 flex flex-wrap items-center gap-3">
+            <Link
+              href="/dashboard"
+              className="px-7 py-3.5 rounded-full bg-primary hover:bg-primary-hover text-white text-xs font-extrabold shadow-xl hover:shadow-2xl transition-all flex items-center gap-2 group scale-105 active:scale-100"
+            >
+              <span>ENTER VIRTUAL LAB</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </Link>
+
+            <Link
+              href="/login"
+              className="px-6 py-3.5 rounded-full bg-surface hover:bg-surface-high border border-border text-text text-xs font-bold shadow-sm hover:shadow transition-all flex items-center gap-2"
+            >
+              <Sparkles className="w-4 h-4 text-secondary" />
+              <span>1-Click Google Sign-In</span>
+            </Link>
+          </div>
+
+          <div className="mt-8 flex items-center gap-4 text-xs text-text-muted">
+            <div className="flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-emerald-500" />
+              <span>Zero arbitrary code execution (AST parsed)</span>
+            </div>
+            <div className="h-3 w-px bg-border"></div>
+            <div className="flex items-center gap-1.5">
+              <Cpu className="w-4 h-4 text-primary" />
+              <span>Port 27017 Connected</span>
+            </div>
+          </div>
         </div>
 
-        <h1 className="text-4xl sm:text-6xl md:text-7xl font-black tracking-tight max-w-5xl mx-auto leading-[1.1] text-text">
-          Learn By Building. <br />
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-secondary to-primary">
-            Learn By Querying.
-          </span>
-        </h1>
+        {/* Right Column: 3D Animated Database Cylinder */}
+        <div className="lg:col-span-6 flex items-center justify-center relative">
+          <DatabaseCylinder3D />
+        </div>
+      </section>
 
-        <p className="mt-6 text-base sm:text-lg md:text-xl text-text-muted max-w-3xl mx-auto font-medium leading-relaxed">
-          The all-in-one Virtual Database Laboratory. Stop fragmenting your learning between slides,
-          terminals, and challenge websites. Model MongoDB schemas, query isolated sandboxes, and receive
-          deterministic evaluations.
+      {/* SECTION 2: Problem & Narrative (Directly inspired by the Video) */}
+      <section id="lab-overview" className="max-w-5xl mx-auto px-4 sm:px-6 py-20 text-center">
+        <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-text leading-snug">
+          This is your database learning today: <br />
+          <span className="text-text-muted font-normal">
+            Countless fragments of critical knowledge scattered across disparate slides, broken local installations, and disconnected challenge websites.
+          </span>
+        </h2>
+        <p className="mt-6 text-sm sm:text-base text-text-muted max-w-2xl mx-auto leading-relaxed">
+          Students lose hours just struggling with MongoDB connection URIs, CLI tools, and theoretical diagrams that never connect to live collections. Data-Chan unifies the entire lifecycle in one virtual laboratory.
         </p>
 
-        {/* CTA Group */}
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
-          <Link
-            href="/dashboard"
-            className="px-8 py-4 rounded-2xl bg-primary hover:bg-primary-hover text-white text-sm font-extrabold shadow-xl hover:shadow-2xl transition-all flex items-center gap-2 group scale-105 active:scale-100"
-          >
-            <span>Launch Virtual Lab</span>
-            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-          </Link>
-
-          <Link
-            href="/playground"
-            className="px-6 py-4 rounded-2xl bg-surface hover:bg-surface-high border border-border text-text text-sm font-bold shadow-sm hover:shadow transition-all flex items-center gap-2"
-          >
-            <Terminal className="w-4 h-4 text-primary" />
-            <span>Open Mongo Playground</span>
-          </Link>
-
-          <Link
-            href="/login"
-            className="px-6 py-4 rounded-2xl bg-surface hover:bg-surface-high border border-border text-text text-sm font-bold shadow-sm hover:shadow transition-all flex items-center gap-2"
-          >
-            <Sparkles className="w-4 h-4 text-secondary" />
-            <span>1-Click Google Login</span>
-          </Link>
-        </div>
-
-        {/* Security Pillars Bar */}
-        <div className="mt-12 flex flex-wrap items-center justify-center gap-6 text-xs text-text-muted font-medium">
-          <div className="flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4 text-emerald-500" />
-            <span>Pure AST Parser (Zero eval/vm execution)</span>
+        {/* Key Stats Row */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mt-12 text-left">
+          <div className="p-6 rounded-3xl bg-surface border border-border shadow-sm">
+            <div className="text-3xl font-black text-primary">100%</div>
+            <div className="text-xs font-bold text-text mt-1">Real MongoDB Engine</div>
+            <div className="text-[11px] text-text-muted mt-1 leading-relaxed">
+              Official Node.js driver underneath isolated physical namespaces (`dc_ws_..._db_...`).
+            </div>
           </div>
-          <div className="h-3 w-px bg-border hidden sm:block"></div>
-          <div className="flex items-center gap-1.5">
-            <Cpu className="w-4 h-4 text-primary" />
-            <span>Physical Namespace Isolation (dc_ws_..._db_...)</span>
+
+          <div className="p-6 rounded-3xl bg-surface border border-border shadow-sm">
+            <div className="text-3xl font-black text-secondary">0 eval()</div>
+            <div className="text-xs font-bold text-text mt-1">Strict AST Security</div>
+            <div className="text-[11px] text-text-muted mt-1 leading-relaxed">
+              Pure Acorn AST parser and operator whitelists ensure complete sandbox safety.
+            </div>
           </div>
-          <div className="h-3 w-px bg-border hidden sm:block"></div>
-          <div className="flex items-center gap-1.5">
-            <CheckCircle2 className="w-4 h-4 text-secondary" />
-            <span>Official MongoDB Node.js Driver & Compass Ready</span>
+
+          <div className="p-6 rounded-3xl bg-surface border border-border shadow-sm">
+            <div className="text-3xl font-black text-emerald-500">15 Lessons</div>
+            <div className="text-xs font-bold text-text mt-1">Structured Academic Path</div>
+            <div className="text-[11px] text-text-muted mt-1 leading-relaxed">
+              From CRUD and projection to deep-dive aggregation stages ($match, $group, $sort).
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Interactive Live Playground Showcase */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 mb-24">
+      {/* SECTION 3: Interactive Live MQL Terminal */}
+      <section id="playground" className="max-w-6xl mx-auto px-4 sm:px-6 mb-24">
         <div className="bg-surface border border-border rounded-3xl p-4 sm:p-6 shadow-2xl relative">
           <div className="flex flex-wrap items-center justify-between pb-4 border-b border-border gap-3">
             <div className="flex items-center gap-2">
@@ -216,7 +254,7 @@ export default function LandingPage() {
               <span className="w-3 h-3 rounded-full bg-yellow-500/80"></span>
               <span className="w-3 h-3 rounded-full bg-emerald-500/80"></span>
               <span className="text-xs font-mono text-text-muted ml-2">
-                sandbox://datachan.local/CollegeDB/students
+                mongodb://localhost:27017/CollegeDB/students
               </span>
             </div>
 
@@ -245,7 +283,7 @@ export default function LandingPage() {
               <div>
                 <div className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center justify-between">
                   <span>MQL Input ({codeSnippets[activeTab].title})</span>
-                  <span className="text-[10px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                  <span className="text-[10px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full font-bold">
                     AST Safe
                   </span>
                 </div>
@@ -256,7 +294,7 @@ export default function LandingPage() {
 
               <div className="pt-4 mt-4 border-t border-border flex items-center justify-between">
                 <span className="text-[11px] text-text-muted font-sans">
-                  Shortcut: <kbd className="px-1.5 py-0.5 rounded bg-surface border border-border text-[10px]">Ctrl</kbd> + <kbd className="px-1.5 py-0.5 rounded bg-surface border border-border text-[10px]">Enter</kbd>
+                  Execute Shortcut: <kbd className="px-1.5 py-0.5 rounded bg-surface border border-border text-[10px]">Ctrl</kbd> + <kbd className="px-1.5 py-0.5 rounded bg-surface border border-border text-[10px]">Enter</kbd>
                 </span>
                 <Link
                   href="/playground"
@@ -294,11 +332,16 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* 5 Core Laboratory Modules */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 mb-24">
+      {/* SECTION 4: OUR TEAM / FOUNDERS SECTION (From Video) */}
+      <div id="team">
+        <TeamFoundersSection />
+      </div>
+
+      {/* SECTION 5: Core Laboratory Pillars */}
+      <section id="curriculum" className="max-w-7xl mx-auto px-4 sm:px-6 py-16">
         <div className="text-center mb-14">
           <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-text">
-            The Complete Database Laboratory
+            Engineered for Database Mastery
           </h2>
           <p className="text-text-muted text-sm sm:text-base mt-2 max-w-2xl mx-auto">
             Everything students and developers need to learn, design, query, and evaluate MongoDB systems.
@@ -411,8 +454,8 @@ export default function LandingPage() {
                 Visual ER & Data Modeler
               </h3>
               <p className="text-xs text-text-muted mt-2 leading-relaxed">
-                Interactive React Flow canvas designed specifically for document modeling. Teaches embedding
-                vs referencing, runs deterministic rule checks, and generates live MongoDB collections.
+                Interactive React Flow canvas with freely resizable boxes. Teaches embedding vs referencing,
+                runs deterministic rule checks, and generates live MongoDB collections.
               </p>
             </div>
             <div className="flex items-center gap-1 text-xs font-bold text-cyan-600 dark:text-cyan-400 mt-6">
@@ -421,7 +464,7 @@ export default function LandingPage() {
             </div>
           </Link>
 
-          {/* Card 6: Compass & Local Tooling */}
+          {/* Card 6: Compass Native */}
           <div className="bg-surface border border-border rounded-3xl p-6 shadow-sm flex flex-col justify-between">
             <div>
               <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-4">
@@ -443,10 +486,33 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* BOTTOM CLIMAX CALL TO ACTION (From Video) */}
+      <section className="max-w-4xl mx-auto px-4 sm:px-6 py-20 text-center relative">
+        <div className="w-64 h-64 mx-auto bg-primary/20 rounded-full blur-3xl absolute inset-0 pointer-events-none"></div>
+        <div className="relative z-10">
+          <h2 className="text-3xl sm:text-5xl font-black tracking-tight text-text leading-tight">
+            Your laboratory has the answer. <br />
+            Enter DATA-CHAN to master it.
+          </h2>
+          <p className="mt-4 text-xs sm:text-sm text-text-muted max-w-lg mx-auto">
+            Designed for college faculty curriculum requirements and real-world database mastery.
+          </p>
+          <div className="mt-8 flex justify-center">
+            <Link
+              href="/dashboard"
+              className="px-8 py-4 rounded-full bg-primary hover:bg-primary-hover text-white text-xs font-extrabold shadow-2xl transition-all scale-105 active:scale-100 flex items-center gap-2"
+            >
+              <span>REQUEST ACCESS / ENTER LAB</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* Footer */}
       <footer className="max-w-7xl mx-auto px-4 sm:px-6 pt-12 border-t border-border flex flex-col sm:flex-row items-center justify-between text-xs text-text-muted gap-4">
         <div>
-          <span className="font-bold text-text">DATA-CHAN</span> · Virtual Database Lab
+          <span className="font-bold text-text">DATA-CHAN</span> · Virtual Database Lab © 2026
         </div>
         <div className="flex items-center gap-6">
           <Link href="/dashboard" className="hover:text-text transition-colors">

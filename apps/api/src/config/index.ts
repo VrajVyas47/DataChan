@@ -7,6 +7,9 @@ export const config = {
   mongodb: {
     uri: process.env.MONGODB_URI || 'mongodb://localhost:27017',
     platformDb: process.env.MONGODB_PLATFORM_DB || 'datachan_platform',
+    user: process.env.MONGODB_USER || '',
+    password: process.env.MONGODB_PASSWORD || '',
+    authSource: process.env.MONGODB_AUTH_SOURCE || 'admin',
   },
   sandbox: {
     maxQueryExecutionMs: parseInt(process.env.MAX_QUERY_EXECUTION_MS || '5000', 10),
