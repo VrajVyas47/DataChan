@@ -39,12 +39,16 @@ export async function executeQuery(req: Request, res: Response, next: NextFuncti
   let targetDbId = '';
 
   try {
-    const { databaseId, collection, rawQuery: inputQuery, normalizedQuery } = req.body;
+    const { databaseId, collection, rawQuery: inputQuery } = req.body;
     rawQuery = inputQuery || '';
     targetDbId = databaseId;
 
     if (!databaseId) {
       throw new InvalidRequestError('databaseId is required for query execution');
+    }
+
+    if (!rawQuery || typeof rawQuery !== 'string' || rawQuery.trim().length === 0) {
+      throw new InvalidRequestError('rawQuery is required for query execution. Submit a valid MQL query string.');
     }
 
     // Verify database ownership
@@ -57,15 +61,13 @@ export async function executeQuery(req: Request, res: Response, next: NextFuncti
       throw new AuthorizationError('You do not have access to this virtual database');
     }
 
-    // Parse & normalize query safely via AST if rawQuery provided
-    let queryToRun = normalizedQuery;
-    let syntaxBreakdown: any[] = [];
-
-    if (rawQuery) {
-      const parsed = parseMqlQuery(rawQuery, databaseId, collection);
-      queryToRun = parsed.normalized;
-      syntaxBreakdown = parsed.breakdown;
-    }
+    // SECURITY: Always parse & normalize through the server-side AST parser.
+    // Client-supplied normalizedQuery is NEVER trusted — all queries must pass
+    // through parseMqlQuery which enforces the operator whitelist and blocks
+    // forbidden operators ($where, $out, $merge, $function, etc.).
+    const parsed = parseMqlQuery(rawQuery, databaseId, collection);
+    const queryToRun = parsed.normalized;
+    const syntaxBreakdown = parsed.breakdown;
 
     if (!queryToRun || !queryToRun.operation) {
       throw new InvalidRequestError('No valid MongoDB operation parsed from query input');

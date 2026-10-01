@@ -102,22 +102,15 @@ export function parseMqlQuery(
     throw new InvalidQueryError('Query is empty. Please enter a valid MongoDB operation.');
   }
 
-  // Check if user submitted raw JSON directly
+  // SECURITY: Reject raw JSON input. All queries must use the standard MQL
+  // syntax (db.collection.operation(...)) which is parsed through the AST
+  // parser and validated against the operator whitelist. Accepting raw JSON
+  // would bypass all sandbox security checks.
   if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-    try {
-      const parsedJson = JSON.parse(trimmed);
-      if (parsedJson.operation) {
-        // Direct normalized query JSON
-        return {
-          normalized: parsedJson,
-          breakdown: [
-            { token: 'JSON Query', category: 'Operation', description: 'Direct normalized query structure' },
-          ],
-        };
-      }
-    } catch {
-      // Not raw JSON, proceed to JS AST parser
-    }
+    throw new InvalidQueryError(
+      'Raw JSON queries are not supported. Please use MQL syntax: db.<collection>.<operation>(...). ' +
+      'Example: db.students.find({ age: { $gt: 18 } })'
+    );
   }
 
   let ast: any;

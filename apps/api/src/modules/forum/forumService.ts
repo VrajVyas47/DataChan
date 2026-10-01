@@ -13,6 +13,14 @@ class ForumService {
     return getPlatformDb().collection<ForumPost>('forum_posts');
   }
 
+  /**
+   * Escapes regex special characters in a string to prevent ReDoS and regex injection.
+   * Converts user input into a safe literal pattern for MongoDB $regex queries.
+   */
+  private escapeRegex(str: string): string {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
   public async listPosts(
     category?: string,
     tag?: string,
@@ -35,7 +43,10 @@ class ForumService {
 
     // Search query
     if (search && search.trim()) {
-      const q = search.trim();
+      // SECURITY: Escape regex special characters to prevent ReDoS and regex injection.
+      // This endpoint is PUBLIC (no auth required), making unsanitized regex especially dangerous.
+      // Limit search length to prevent overly complex patterns.
+      const q = this.escapeRegex(search.trim().substring(0, 200));
       filter.$or = [
         { title: { $regex: q, $options: 'i' } },
         { content: { $regex: q, $options: 'i' } },

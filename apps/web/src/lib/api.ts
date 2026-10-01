@@ -290,12 +290,11 @@ class ApiClient {
   async executePlaygroundQuery(
     databaseId: string,
     collection: string,
-    rawQuery: string,
-    normalizedQuery?: any
+    rawQuery: string
   ): Promise<QueryResult> {
     return this.request<QueryResult>('/playground/query', {
       method: 'POST',
-      body: JSON.stringify({ databaseId, collection, rawQuery, normalizedQuery }),
+      body: JSON.stringify({ databaseId, collection, rawQuery }),
     });
   }
 

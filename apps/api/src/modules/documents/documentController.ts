@@ -40,6 +40,14 @@ function parseObjectId(idStr: string): ObjectId | string {
   return idStr;
 }
 
+/**
+ * Escapes regex special characters in a string to prevent ReDoS and regex injection.
+ * Converts user input into a safe literal pattern for MongoDB $regex queries.
+ */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export async function getDocuments(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const databaseId = String(req.params.databaseId || '');
@@ -55,10 +63,13 @@ export async function getDocuments(req: Request, res: Response, next: NextFuncti
 
     const filter: Record<string, any> = {};
     if (search && search.trim().length > 0) {
+      // SECURITY: Escape regex special characters to prevent ReDoS and regex injection.
+      // Limit search length to prevent overly complex patterns.
+      const safeSearch = escapeRegex(search.trim().substring(0, 200));
       filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { title: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
+        { name: { $regex: safeSearch, $options: 'i' } },
+        { title: { $regex: safeSearch, $options: 'i' } },
+        { email: { $regex: safeSearch, $options: 'i' } },
       ];
     }
 
