@@ -16,20 +16,45 @@ export function ParticleScene() {
     const manager = new SceneManager(containerRef.current);
     sceneManagerRef.current = manager;
 
-    // Connect sections to 3D stage choreography via GSAP ScrollTrigger
-    const sections = ['#hero', '#manifesto', '#product', '#team', '#investors', '#cta'];
+    // Strictly ensure initial hero state (stage 0, progress 0)
+    manager.updateScrollState(0, 0);
 
-    sections.forEach((secId, index) => {
-      const el = document.querySelector(secId);
+    // 1. Hero Section ScrollTrigger: begins when user scrolls down from top of hero
+    const heroEl = document.querySelector('#hero');
+    if (heroEl) {
+      ScrollTrigger.create({
+        trigger: heroEl,
+        start: 'top top',
+        end: 'bottom top',
+        scrub: 1.0,
+        onUpdate: (self) => {
+          manager.updateScrollState(0, self.progress);
+        },
+      });
+    }
+
+    // 2. Subsequent Sections: only update when actively in view
+    const laterSections = [
+      { id: '#manifesto', stage: 1 },
+      { id: '#product', stage: 2 },
+      { id: '#team', stage: 3 },
+      { id: '#investors', stage: 4 },
+      { id: '#cta', stage: 5 },
+    ];
+
+    laterSections.forEach(({ id, stage }) => {
+      const el = document.querySelector(id);
       if (!el) return;
 
       ScrollTrigger.create({
         trigger: el,
-        start: 'top bottom',
-        end: 'bottom top',
-        scrub: 1.2,
+        start: 'top 80%',
+        end: 'bottom 20%',
+        scrub: 1.0,
         onUpdate: (self) => {
-          manager.updateScrollState(index, self.progress);
+          if (self.isActive) {
+            manager.updateScrollState(stage, self.progress);
+          }
         },
       });
     });

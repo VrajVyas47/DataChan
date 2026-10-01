@@ -14,6 +14,9 @@ import {
   Node,
   Handle,
   Position,
+  NodeResizer,
+  ReactFlowProvider,
+  useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { api } from '@/lib/api';
@@ -28,6 +31,7 @@ import {
 import {
   Boxes,
   Plus,
+  Minus,
   Save,
   CheckCircle2,
   AlertTriangle,
@@ -40,15 +44,27 @@ import {
   ChevronDown,
   Maximize2,
   Minimize2,
+  Lock,
+  Unlock,
   GripHorizontal,
 } from 'lucide-react';
 
 // Custom Resizable React Flow Node for MongoDB Collections
 const CollectionNode = ({ data, id, selected }: any) => {
-  const [nodeWidth, setNodeWidth] = useState<number>(data.width || 300);
+  const [nodeWidth, setNodeWidth] = useState<number>(data.width || 320);
   const [nodeHeight, setNodeHeight] = useState<number | string>(data.height || 'auto');
   const isResizingRef = useRef(false);
-  const startPosRef = useRef({ x: 0, y: 0, width: 300, height: 200 });
+  const startPosRef = useRef({ x: 0, y: 0, width: 320, height: 220 });
+
+  const updateSize = (w: number, h: number | string) => {
+    const clampedW = Math.max(240, Math.min(800, w));
+    const clampedH = typeof h === 'number' ? Math.max(160, Math.min(900, h)) : h;
+    setNodeWidth(clampedW);
+    setNodeHeight(clampedH);
+    if (data.onResize) {
+      data.onResize(id, clampedW, clampedH);
+    }
+  };
 
   const startResize = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -58,20 +74,14 @@ const CollectionNode = ({ data, id, selected }: any) => {
       x: e.clientX,
       y: e.clientY,
       width: nodeWidth,
-      height: typeof nodeHeight === 'number' ? nodeHeight : 200,
+      height: typeof nodeHeight === 'number' ? nodeHeight : 220,
     };
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       if (!isResizingRef.current) return;
       const dx = moveEvent.clientX - startPosRef.current.x;
       const dy = moveEvent.clientY - startPosRef.current.y;
-      const nextWidth = Math.max(220, Math.min(800, startPosRef.current.width + dx));
-      const nextHeight = Math.max(140, Math.min(900, startPosRef.current.height + dy));
-      setNodeWidth(nextWidth);
-      setNodeHeight(nextHeight);
-      if (data.onResize) {
-        data.onResize(id, nextWidth, nextHeight);
-      }
+      updateSize(startPosRef.current.width + dx, startPosRef.current.height + dy);
     };
 
     const handleMouseUp = () => {
@@ -85,20 +95,31 @@ const CollectionNode = ({ data, id, selected }: any) => {
   };
 
   const setPresetWidth = (w: number) => {
-    setNodeWidth(w);
-    if (data.onResize) data.onResize(id, w, nodeHeight);
+    updateSize(w, nodeHeight);
   };
 
   return (
     <div
       style={{
         width: `${nodeWidth}px`,
-        height: typeof nodeHeight === 'number' ? `${nodeHeight}px` : 'auto',
+        minHeight: typeof nodeHeight === 'number' ? `${nodeHeight}px` : 'auto',
       }}
       className={`bg-surface rounded-2xl border-2 transition-shadow shadow-md p-3.5 text-text flex flex-col justify-between relative group ${
         selected ? 'border-primary shadow-lg ring-2 ring-primary/30' : 'border-border hover:border-primary/50'
       }`}
     >
+      <NodeResizer
+        minWidth={240}
+        minHeight={160}
+        maxWidth={800}
+        maxHeight={900}
+        isVisible={selected}
+        lineClassName="!border-primary !border-dashed"
+        handleClassName="!w-3 !h-3 !bg-surface !border-2 !border-primary !rounded-md shadow-sm"
+        onResize={(_, { width, height }) => {
+          updateSize(width, height);
+        }}
+      />
       <Handle type="target" position={Position.Top} className="!bg-primary !w-3 !h-3" />
 
       {/* Header with Title, Width Presets, and Delete */}
@@ -200,6 +221,86 @@ const CollectionNode = ({ data, id, selected }: any) => {
   );
 };
 
+// Custom Theme-Aware Floating Canvas Toolbar
+function CanvasToolbar({
+  isLocked,
+  setIsLocked,
+}: {
+  isLocked: boolean;
+  setIsLocked: React.Dispatch<React.SetStateAction<boolean>>;
+}) {
+  const { zoomIn, zoomOut, fitView } = useReactFlow();
+
+  return (
+    <div
+      style={{ backgroundColor: 'var(--color-surface-elevated, #ffffff)' }}
+      className="absolute bottom-4 left-4 z-20 flex items-center gap-1.5 p-1.5 rounded-2xl bg-surface-elevated border border-border shadow-lg text-text"
+      role="toolbar"
+      aria-label="Canvas Navigation Toolbar"
+    >
+      {/* Zoom In */}
+      <button
+        type="button"
+        onClick={() => zoomIn({ duration: 250 })}
+        className="w-8 h-8 rounded-xl flex items-center justify-center bg-surface hover:bg-surface-high text-text hover:text-primary border border-border transition-colors active:scale-95"
+        title="Zoom In (+)"
+        aria-label="Zoom In"
+      >
+        <Plus className="w-4 h-4" />
+      </button>
+
+      {/* Zoom Out */}
+      <button
+        type="button"
+        onClick={() => zoomOut({ duration: 250 })}
+        className="w-8 h-8 rounded-xl flex items-center justify-center bg-surface hover:bg-surface-high text-text hover:text-primary border border-border transition-colors active:scale-95"
+        title="Zoom Out (-)"
+        aria-label="Zoom Out"
+      >
+        <Minus className="w-4 h-4" />
+      </button>
+
+      {/* Fit to View */}
+      <button
+        type="button"
+        onClick={() => fitView({ padding: 0.2, duration: 400 })}
+        className="w-8 h-8 rounded-xl flex items-center justify-center bg-surface hover:bg-surface-high text-text hover:text-primary border border-border transition-colors active:scale-95"
+        title="Fit View"
+        aria-label="Fit View"
+      >
+        <Maximize2 className="w-4 h-4" />
+      </button>
+
+      <div className="w-[1px] h-5 bg-border mx-0.5" />
+
+      {/* Lock / Interactive Mode Toggle */}
+      <button
+        type="button"
+        onClick={() => setIsLocked((prev) => !prev)}
+        className={`flex items-center gap-1.5 px-3 h-8 rounded-xl text-xs font-bold transition-all border ${
+          isLocked
+            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/40 hover:bg-amber-500/25'
+            : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/25'
+        }`}
+        title={isLocked ? 'Canvas Locked (Click to allow movement)' : 'Interactive Mode (Click to lock positions)'}
+        aria-label={isLocked ? 'Canvas Locked' : 'Interactive Mode'}
+      >
+        {isLocked ? (
+          <>
+            <Lock className="w-3.5 h-3.5" />
+            <span className="text-[11px]">Locked</span>
+          </>
+        ) : (
+          <>
+            <Unlock className="w-3.5 h-3.5" />
+            <span className="text-[11px]">Interactive</span>
+          </>
+        )}
+      </button>
+    </div>
+  );
+}
+
 const nodeTypes = {
   collectionNode: CollectionNode,
 };
@@ -215,6 +316,8 @@ export default function ModelerPage() {
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isLocked, setIsLocked] = useState(false);
 
   const handleResizeNode = useCallback((nodeId: string, newWidth: number, newHeight: number | string) => {
     setNodes((nds) =>
@@ -222,6 +325,11 @@ export default function ModelerPage() {
         if (n.id === nodeId) {
           return {
             ...n,
+            style: {
+              ...n.style,
+              width: newWidth,
+              height: typeof newHeight === 'number' ? newHeight : undefined,
+            },
             data: {
               ...n.data,
               width: newWidth,
@@ -443,7 +551,8 @@ export default function ModelerPage() {
       setStatusMsg('Data model saved successfully!');
       setTimeout(() => setStatusMsg(null), 3000);
     } catch (err: any) {
-      alert(err.message);
+      setErrorMsg(err.message || 'Failed to save data model');
+      setTimeout(() => setErrorMsg(null), 4000);
     } finally {
       setSaving(false);
     }
@@ -451,7 +560,8 @@ export default function ModelerPage() {
 
   async function handleGenerateStructure() {
     if (!selectedDb) {
-      alert('Please select a target database first.');
+      setErrorMsg('Please select a target database first.');
+      setTimeout(() => setErrorMsg(null), 4000);
       return;
     }
     setGenerating(true);
@@ -484,7 +594,8 @@ export default function ModelerPage() {
       );
       setTimeout(() => setStatusMsg(null), 4000);
     } catch (err: any) {
-      alert(`Generation failed: ${err.message}`);
+      setErrorMsg(`Generation failed: ${err.message}`);
+      setTimeout(() => setErrorMsg(null), 4000);
     } finally {
       setGenerating(false);
     }
@@ -499,6 +610,16 @@ export default function ModelerPage() {
             <CheckCircle2 className="w-4 h-4" />
             <span>{statusMsg}</span>
           </div>
+        </div>
+      )}
+
+      {errorMsg && (
+        <div className="bg-red-500/90 text-white px-5 py-3 rounded-full text-xs font-bold flex items-center justify-between shadow-md">
+          <div className="flex items-center gap-2">
+            <XCircle className="w-4 h-4" />
+            <span>{errorMsg}</span>
+          </div>
+          <button onClick={() => setErrorMsg(null)} className="text-white/80 hover:text-white text-xs ml-3 font-mono">✕</button>
         </div>
       )}
 
@@ -566,26 +687,37 @@ export default function ModelerPage() {
         {/* ========================================================================= */}
         <div className="lg:col-span-8 flex flex-col gap-3">
           <div className="h-[600px] w-full rounded-3xl border-2 border-border shadow-soft overflow-hidden bg-surface relative">
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
-              nodeTypes={nodeTypes}
-              fitView
-            >
-              <Background color="var(--color-border)" gap={20} />
-              <Controls className="!bg-surface !border-border !rounded-2xl overflow-hidden shadow-md" />
-              <MiniMap
-                className="!bg-surface !border-border !rounded-2xl overflow-hidden shadow-md"
-                nodeColor="var(--color-primary)"
-              />
-            </ReactFlow>
+            <ReactFlowProvider>
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                nodeTypes={nodeTypes}
+                nodesDraggable={!isLocked}
+                nodesConnectable={!isLocked}
+                elementsSelectable={!isLocked}
+                fitView
+              >
+                <Background color="var(--color-border)" gap={20} />
+                <Controls className="!bg-surface !border-border !rounded-2xl overflow-hidden shadow-md" />
+                <MiniMap
+                  className="!bg-surface !border-border !rounded-2xl overflow-hidden shadow-md"
+                  nodeColor="var(--color-primary)"
+                />
+              </ReactFlow>
 
-            <div className="absolute top-4 left-4 bg-surface/90 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-border text-[11px] font-mono shadow-sm flex items-center gap-2">
+              {/* Explicit Theme-Aware Floating Canvas Toolbar (Zoom, Fit, Lock/Unlock) */}
+              <CanvasToolbar isLocked={isLocked} setIsLocked={setIsLocked} />
+            </ReactFlowProvider>
+
+            <div
+              style={{ backgroundColor: 'var(--color-surface-elevated, #ffffff)' }}
+              className="absolute top-4 left-4 z-10 bg-surface-elevated px-3.5 py-2 rounded-2xl border border-border text-[11px] font-mono shadow-sm flex items-center gap-2 text-text"
+            >
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>Tip: Drag the bottom-right corner of any collection box or use S/M/L presets to resize.</span>
+              <span>Tip: Click collection to reveal resize handles, or drag corner / use S/M/L presets.</span>
             </div>
           </div>
         </div>

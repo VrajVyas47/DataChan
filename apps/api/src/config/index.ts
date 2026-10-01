@@ -20,5 +20,15 @@ export const config = {
     projectId: process.env.FIREBASE_PROJECT_ID || '',
     clientEmail: process.env.FIREBASE_CLIENT_EMAIL || '',
     privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+    emulatorHost: process.env.FIREBASE_AUTH_EMULATOR_HOST || '',
+  },
+  session: {
+    cookieName: 'datachan_session',
+    expirationDays: parseInt(process.env.SESSION_EXPIRATION_DAYS || '7', 10),
+  },
+  cors: {
+    allowedOrigins: process.env.ALLOWED_ORIGINS
+      ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+      : ['http://localhost:3000', 'http://127.0.0.1:3000'],
   },
 };

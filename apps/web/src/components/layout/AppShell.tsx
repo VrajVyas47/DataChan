@@ -12,16 +12,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { navPosition } = useTheme();
   const [authChecked, setAuthChecked] = useState(false);
 
-  const isPublicPage = pathname === '/' || pathname === '/login';
+  const isPublicPage = pathname === '/' || pathname === '/login' || pathname.startsWith('/forum');
 
   useEffect(() => {
+    // Listen for global 401 unauthorized events dispatched by API client
+    const handleUnauthorized = () => {
+      router.push(`/login?from=${encodeURIComponent(pathname)}`);
+    };
+    window.addEventListener('datachan_unauthorized', handleUnauthorized);
+
     if (!isPublicPage) {
-      if (!api.isAuthenticated()) {
-        router.push('/login');
-        return;
-      }
+      // Validate session with authoritative backend
+      api
+        .getMe()
+        .then(() => {
+          setAuthChecked(true);
+        })
+        .catch(() => {
+          router.push(`/login?from=${encodeURIComponent(pathname)}`);
+        });
+    } else {
+      setAuthChecked(true);
     }
-    setAuthChecked(true);
+
+    return () => {
+      window.removeEventListener('datachan_unauthorized', handleUnauthorized);
+    };
   }, [pathname, isPublicPage, router]);
 
   if (isPublicPage) {
@@ -32,11 +48,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Prevent flashing protected dashboard while redirecting unauthenticated user
-  if (!authChecked && !api.isAuthenticated()) {
+  // Prevent flashing protected dashboard while establishing session
+  if (!authChecked) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-background text-text">
-        <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-background text-text">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          <span className="text-xs font-mono text-text-muted tracking-wider uppercase">
+            Verifying Laboratory Session...
+          </span>
+        </div>
       </div>
     );
   }

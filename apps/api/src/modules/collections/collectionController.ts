@@ -115,12 +115,40 @@ export async function inspectCollection(req: Request, res: Response, next: NextF
     const col = userDb.collection(name);
 
     const count = await col.countDocuments();
-    const samples = await col.find().limit(50).toArray();
+    const samples = await col.find().limit(100).toArray();
 
-    // Analyze detected fields across sample documents
+    // 1. Fetch real MongoDB Indexes
+    let rawIndexes: any[] = [];
+    try {
+      rawIndexes = await col.indexes();
+    } catch {
+      rawIndexes = [{ name: '_id_', key: { _id: 1 } }];
+    }
+
+    const indexes = rawIndexes.map((idx) => ({
+      name: idx.name || 'index',
+      key: idx.key || {},
+      unique: Boolean(idx.unique),
+    }));
+
+    const indexedFieldNames = new Set<string>();
+    for (const idx of indexes) {
+      if (idx.key) {
+        for (const k of Object.keys(idx.key)) {
+          indexedFieldNames.add(k);
+        }
+      }
+    }
+
+    // 2. Analyze detected fields across sample documents
     const fieldMap = new Map<string, { types: Set<string>; count: number; example: any }>();
+    let totalSampleBytes = 0;
 
     for (const doc of samples) {
+      try {
+        totalSampleBytes += Buffer.byteLength(JSON.stringify(doc));
+      } catch {}
+
       for (const [key, value] of Object.entries(doc)) {
         if (!fieldMap.has(key)) {
           fieldMap.set(key, { types: new Set<string>(), count: 0, example: value });
@@ -148,21 +176,63 @@ export async function inspectCollection(req: Request, res: Response, next: NextF
       }
     }
 
+    const avgDocumentSizeBytes = samples.length > 0 ? Math.round(totalSampleBytes / samples.length) : 0;
+
+    // 3. Construct DetectedFieldInfo with Polymorphism and Index coverage
     const detectedFields: DetectedFieldInfo[] = Array.from(fieldMap.entries()).map(([k, v]) => ({
       name: k,
       types: Array.from(v.types),
       isArray: v.types.has('Array'),
       isObject: v.types.has('Object'),
       isObjectId: v.types.has('ObjectId') || k === '_id',
+      isPolymorphic: v.types.size > 1,
+      isIndexed: indexedFieldNames.has(k),
       presencePercent: samples.length > 0 ? Math.round((v.count / samples.length) * 100) : 0,
       exampleValue: v.example,
     }));
+
+    // 4. Schema Advisor Recommendations
+    const recommendations: any[] = [];
+
+    // Check for polymorphic types
+    for (const f of detectedFields) {
+      if (f.isPolymorphic) {
+        recommendations.push({
+          type: 'warning',
+          field: f.name,
+          message: `Field '${f.name}' has mixed types (${f.types.join(', ')}). Consider enforcing schema validation to prevent query index misses.`,
+        });
+      }
+    }
+
+    // Check for unindexed high-presence fields
+    for (const f of detectedFields) {
+      if (f.name !== '_id' && f.presencePercent >= 90 && !f.isIndexed && (f.types.includes('String') || f.types.includes('Number'))) {
+        recommendations.push({
+          type: 'optimization',
+          field: f.name,
+          message: `Field '${f.name}' is present in ${f.presencePercent}% of documents but is unindexed. An index on { ${f.name}: 1 } will accelerate filters.`,
+        });
+      }
+    }
+
+    if (indexes.length === 1 && count > 20) {
+      recommendations.push({
+        type: 'info',
+        message: 'Only the default _id_ index exists. Compound or secondary indexes can significantly speed up MQL queries.',
+      });
+    }
 
     const metadata: CollectionMetadata = {
       name,
       databaseId,
       documentsCount: count,
+      avgDocumentSizeBytes,
+      totalSizeBytes: totalSampleBytes,
+      indexesCount: indexes.length,
+      indexes,
       detectedFields,
+      recommendations,
     };
 
     const response: ApiResponse<CollectionMetadata> = {

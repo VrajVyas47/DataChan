@@ -27,6 +27,12 @@ import {
   AlertCircle,
   X,
   Check,
+  Sparkles,
+  Zap,
+  ShieldCheck,
+  AlertTriangle,
+  Layers,
+  BarChart2,
 } from 'lucide-react';
 
 export default function WorkspacePage() {
@@ -38,7 +44,7 @@ export default function WorkspacePage() {
   const [activeCollection, setActiveCollection] = useState<string | null>(null);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [collectionMeta, setCollectionMeta] = useState<CollectionMetadata | null>(null);
-  const [viewMode, setViewMode] = useState<'card' | 'table' | 'json'>('card');
+  const [viewMode, setViewMode] = useState<'card' | 'table' | 'json' | 'schema'>('card');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [docsLoading, setDocsLoading] = useState(false);
@@ -448,6 +454,18 @@ export default function WorkspacePage() {
                 >
                   <Code2 className="w-3.5 h-3.5" />
                 </button>
+                <button
+                  onClick={() => setViewMode('schema')}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    viewMode === 'schema'
+                      ? 'bg-primary text-white shadow-sm'
+                      : 'text-text-muted hover:bg-surface-high hover:text-text-main'
+                  }`}
+                  title="MongoDB Schema Analysis & Advisor"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Schema Advisor</span>
+                </button>
               </div>
 
               {/* Insert Doc Button */}
@@ -594,12 +612,173 @@ export default function WorkspacePage() {
                 </tbody>
               </table>
             </div>
-          ) : (
+          ) : viewMode === 'json' ? (
             /* JSON View */
             <div className="bg-inverse-surface rounded-2xl p-4 overflow-x-auto text-inverse-text font-mono text-xs shadow-md max-h-[500px]">
               <pre className="whitespace-pre-wrap leading-relaxed">
                 {JSON.stringify(documents, null, 2)}
               </pre>
+            </div>
+          ) : (
+            /* Schema Analysis & Advisor View */
+            <div className="flex flex-col gap-6">
+              {/* Top KPI Metrics Bar */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3.5 rounded-2xl bg-surface border border-border flex flex-col gap-1">
+                  <span className="text-[10px] font-bold text-text-muted uppercase">Sampled Docs</span>
+                  <span className="text-xl font-black text-text-main">{collectionMeta?.documentsCount || 0}</span>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-surface border border-border flex flex-col gap-1">
+                  <span className="text-[10px] font-bold text-text-muted uppercase">Detected Fields</span>
+                  <span className="text-xl font-black text-primary">{collectionMeta?.detectedFields?.length || 0}</span>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-surface border border-border flex flex-col gap-1">
+                  <span className="text-[10px] font-bold text-text-muted uppercase">Active Indexes</span>
+                  <span className="text-xl font-black text-emerald-500">{collectionMeta?.indexesCount || 1}</span>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-surface border border-border flex flex-col gap-1">
+                  <span className="text-[10px] font-bold text-text-muted uppercase">Avg Doc Size</span>
+                  <span className="text-xl font-black text-amber-500">{collectionMeta?.avgDocumentSizeBytes || 0} B</span>
+                </div>
+              </div>
+
+              {/* Schema Advisor Recommendations */}
+              {collectionMeta?.recommendations && collectionMeta.recommendations.length > 0 && (
+                <div className="flex flex-col gap-2.5">
+                  <div className="flex items-center gap-2 text-xs font-bold text-text-main uppercase tracking-wider">
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                    <span>Schema Optimization Advisor</span>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {collectionMeta.recommendations.map((rec, i) => (
+                      <div
+                        key={i}
+                        className={`p-3.5 rounded-xl border flex items-start gap-3 text-xs ${
+                          rec.type === 'warning'
+                            ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                            : rec.type === 'optimization'
+                            ? 'bg-primary/10 border-primary/30 text-text-main'
+                            : 'bg-surface-high border-border text-text-muted'
+                        }`}
+                      >
+                        {rec.type === 'warning' ? (
+                          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                        ) : (
+                          <Zap className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                        )}
+                        <span className="leading-relaxed">{rec.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Detected Fields Schema Matrix */}
+              <div className="bg-surface rounded-2xl border border-border overflow-hidden">
+                <div className="p-3.5 border-b border-border bg-surface-low flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-primary" />
+                    <span className="text-xs font-bold text-text-main uppercase tracking-wider">Field Type & Presence Matrix</span>
+                  </div>
+                  <span className="text-[10px] text-text-muted font-mono">MongoDB Dynamic Schema Detection</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-border bg-surface-high/40 text-[10px] font-bold text-text-muted uppercase">
+                        <th className="p-3">Field Name</th>
+                        <th className="p-3">Data Types</th>
+                        <th className="p-3">Presence</th>
+                        <th className="p-3">Index Status</th>
+                        <th className="p-3">Sample Value</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {collectionMeta?.detectedFields?.map((field) => (
+                        <tr key={field.name} className="hover:bg-surface-high/30 transition-colors">
+                          <td className="p-3 font-mono font-bold text-text-main">
+                            {field.name}
+                            {field.isPolymorphic && (
+                              <span className="ml-2 text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded border border-amber-500/30">
+                                Polymorphic
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            <div className="flex flex-wrap gap-1">
+                              {field.types.map((t) => (
+                                <span
+                                  key={t}
+                                  className="px-2 py-0.5 rounded-full font-mono text-[10px] font-bold bg-primary/10 text-primary border border-primary/20"
+                                >
+                                  {t}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <div className="flex items-center gap-2">
+                              <div className="w-16 h-2 bg-surface-high rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${
+                                    field.presencePercent === 100 ? 'bg-emerald-500' : 'bg-primary'
+                                  }`}
+                                  style={{ width: `${field.presencePercent}%` }}
+                                />
+                              </div>
+                              <span className="font-mono text-[10px] font-bold text-text-muted">
+                                {field.presencePercent}%
+                              </span>
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            {field.isIndexed ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                                <Zap className="w-3 h-3" />
+                                <span>Indexed</span>
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-text-muted">Unindexed</span>
+                            )}
+                          </td>
+                          <td className="p-3 font-mono text-[11px] text-text-muted max-w-[200px] truncate">
+                            {typeof field.exampleValue === 'object'
+                              ? JSON.stringify(field.exampleValue)
+                              : String(field.exampleValue)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Active Indexes Card */}
+              {collectionMeta?.indexes && collectionMeta.indexes.length > 0 && (
+                <div className="bg-surface rounded-2xl border border-border p-4 flex flex-col gap-3">
+                  <div className="flex items-center justify-between pb-2 border-b border-border">
+                    <div className="flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-emerald-500" />
+                      <span className="text-xs font-bold text-text-main uppercase tracking-wider">Active MongoDB Indexes ({collectionMeta.indexes.length})</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                    {collectionMeta.indexes.map((idx) => (
+                      <div key={idx.name} className="p-3 rounded-xl bg-surface-low border border-border flex flex-col gap-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono text-xs font-bold text-primary truncate">{idx.name}</span>
+                          {idx.unique && (
+                            <span className="text-[9px] bg-purple-500/20 text-purple-300 px-1.5 py-0.2 rounded font-bold">Unique</span>
+                          )}
+                        </div>
+                        <span className="text-[10px] font-mono text-text-muted truncate">
+                          Keys: {JSON.stringify(idx.key)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

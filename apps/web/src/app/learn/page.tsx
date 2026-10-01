@@ -56,19 +56,27 @@ export default function LearnPage() {
     setPracticing(true);
     setPracticeResult(null);
     try {
-      const me = await api.getMe();
-      if (!me.activeDatabaseId) {
-        alert('Please select or create an active database first');
-        return;
+      const res = await api.runPractical(selectedLesson.id, practiceCode.trim());
+      setPracticeResult({
+        data: res.result,
+        documentsCount: res.documentsCount,
+        executionTimeMs: res.executionTimeMs,
+        targetDatabase: res.targetDatabase,
+        collection: res.collection,
+        syntaxBreakdown: res.syntaxBreakdown,
+      });
+
+      if (res.xpAwarded && res.xpAwarded > 0) {
+        setClaimedXp(res.xpAwarded);
       }
-      const res = await api.executePlaygroundQuery(
-        me.activeDatabaseId,
-        selectedLesson.practiceCollection || 'students',
-        practiceCode.trim()
+
+      // Mark lesson as completed in state
+      setSelectedLesson((prev: any) => (prev ? { ...prev, completed: true } : null));
+      setLessons((prev) =>
+        prev.map((l) => (l.id === selectedLesson.id ? { ...l, completed: true } : l))
       );
-      setPracticeResult(res);
     } catch (err: any) {
-      setPracticeResult({ error: err.message });
+      setPracticeResult({ error: err.message || 'Execution error during practical' });
     } finally {
       setPracticing(false);
     }
@@ -286,39 +294,81 @@ export default function LearnPage() {
                   rows={4}
                   value={practiceCode}
                   onChange={(e) => setPracticeCode(e.target.value)}
+                  onKeyDown={(e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                      e.preventDefault();
+                      handleRunPractice();
+                    }
+                  }}
+                  placeholder="Enter MQL query, e.g. db.students.find().limit(2)"
                   className="w-full p-3 font-mono text-xs rounded-xl bg-surface border border-border text-text-main focus:outline-none focus:ring-2 focus:ring-primary"
                 />
 
                 <div className="flex items-center justify-between">
-                  <Link
-                    href="/playground"
-                    className="text-xs font-semibold text-primary hover:underline flex items-center gap-1"
-                  >
-                    <span>Open in Playground</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </Link>
+                  <div className="flex items-center gap-3">
+                    <Link
+                      href="/playground"
+                      className="text-xs font-semibold text-primary hover:underline flex items-center gap-1"
+                    >
+                      <span>Open in Playground</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </Link>
+                    <span className="text-[11px] text-text-muted hidden sm:inline">
+                      Press <kbd className="px-1.5 py-0.5 rounded bg-surface-high border border-border font-mono text-[10px]">Ctrl+Enter</kbd> to run
+                    </span>
+                  </div>
 
                   <button
                     onClick={handleRunPractice}
                     disabled={practicing}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary hover:bg-primary/90 text-white text-xs font-bold shadow-md hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-primary hover:bg-primary/90 text-white text-xs font-bold shadow-md hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
                   >
                     <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>{practicing ? 'Executing...' : 'Run Practice'}</span>
+                    <span>{practicing ? 'Running Practical...' : 'Run Practical'}</span>
                   </button>
                 </div>
 
                 {practiceResult && (
-                  <div className="mt-2 flex flex-col gap-2">
-                    <span className="text-[11px] font-bold text-text-muted uppercase">
-                      Execution Output:
-                    </span>
+                  <div className="mt-3 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-text-muted uppercase">
+                        Practical Execution Output:
+                      </span>
+                      {practiceResult.executionTimeMs !== undefined && (
+                        <div className="flex items-center gap-2 text-[11px] font-mono text-tertiary">
+                          <span>✓ {practiceResult.executionTimeMs}ms</span>
+                          <span>&bull;</span>
+                          <span>{practiceResult.documentsCount} documents</span>
+                          {practiceResult.targetDatabase && (
+                            <>
+                              <span>&bull;</span>
+                              <span className="text-text-muted">db: {practiceResult.targetDatabase}</span>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {practiceResult.syntaxBreakdown && practiceResult.syntaxBreakdown.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 py-1">
+                        {practiceResult.syntaxBreakdown.map((item: any, idx: number) => (
+                          <span
+                            key={idx}
+                            title={item.description}
+                            className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-surface border border-border text-text-muted"
+                          >
+                            <span className="text-secondary font-bold">{item.category}:</span> {item.token}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
                     {practiceResult.error ? (
                       <div className="p-3 bg-error/10 border border-error/30 text-error rounded-xl text-xs font-mono">
                         {practiceResult.error}
                       </div>
                     ) : (
-                      <pre className="p-3 bg-inverse-surface text-inverse-text rounded-xl font-mono text-xs max-h-[220px] overflow-auto whitespace-pre-wrap">
+                      <pre className="p-3 bg-inverse-surface text-inverse-text rounded-xl font-mono text-xs max-h-[240px] overflow-auto whitespace-pre-wrap">
                         {JSON.stringify(practiceResult.data, null, 2)}
                       </pre>
                     )}

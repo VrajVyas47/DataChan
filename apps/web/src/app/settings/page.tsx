@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTheme, NavPosition } from '@/lib/theme';
 import { api } from '@/lib/api';
+import { UserProfile } from '@datachan/shared-types';
 import {
   Palette,
   User,
@@ -43,14 +44,15 @@ export default function SettingsPage() {
 
   const [displayName, setDisplayName] = useState('');
   const [savedNotice, setSavedNotice] = useState(false);
-
-  const [devUser, setDevUser] = useState<{ uid?: string; email?: string; name?: string; role?: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
 
   useEffect(() => {
-    setDevUser(api.getDevUser());
     api
       .getMe()
-      .then((me) => setDisplayName(me.displayName || me.username))
+      .then((me) => {
+        setCurrentUser(me);
+        setDisplayName(me.displayName || me.username);
+      })
       .catch(() => {});
   }, []);
 
@@ -64,42 +66,6 @@ export default function SettingsPage() {
       alert(err.message);
     }
   }
-
-  async function handleSwitchDevUser(id: string, name: string, email: string, role?: string) {
-    api.setDevUser(id, email, name, role);
-    api.setToken(`token_${id}`);
-    try {
-      await api.syncUser({ displayName: name });
-    } catch {}
-    window.location.reload();
-  }
-
-  const demoPersonas = [
-    {
-      id: 'fresh_onboard',
-      name: 'Fresh Onboard',
-      email: 'fresh@data-chan.edu',
-      role: 'Newly Onboarded Student',
-      desc: '0 XP, fresh sandbox, empty collections. Ideal for testing onboarding.',
-      avatar: '🌱',
-    },
-    {
-      id: 'prof_sharma',
-      name: 'Professor Sharma',
-      email: 'sharma@faculty.data-chan.edu',
-      role: 'CS Faculty / Instructor',
-      desc: '3,200 XP, 42-day streak. Faculty review view with grading access.',
-      avatar: '🎓',
-    },
-    {
-      id: 'vraj_dev',
-      name: 'Vraj',
-      email: 'vraj@data-chan.edu',
-      role: 'Student / Lead Developer',
-      desc: '1,850 XP, 14-day streak. Active CollegeDB workspace with verified sandboxes.',
-      avatar: '👨‍💻',
-    },
-  ];
 
   const colorPresets = [
     { name: 'Royal Violet', hex: '#7c3aed' },
@@ -417,47 +383,60 @@ export default function SettingsPage() {
         </form>
       </div>
 
-      {/* 4. Switch User / Development Identity Switcher */}
+      {/* 4. Authoritative Account & Security Overview */}
       <div className="bg-surface rounded-3xl p-6 border border-border shadow-sm flex flex-col gap-4">
         <div className="flex items-center gap-2 pb-2 border-b border-border">
-          <Users className="w-5 h-5 text-emerald-500" />
+          <Users className="w-5 h-5 text-primary" />
           <div>
-            <h3 className="text-sm font-bold text-text">Switch User</h3>
+            <h3 className="text-sm font-bold text-text">Account & Authorization Information</h3>
             <span className="text-xs text-text-muted">
-              Select an authorized development identity to switch active user context, XP, and workspace.
+              Server-enforced laboratory role, account status, and authentication security.
             </span>
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-          {demoPersonas.map((persona) => {
-            const isCurrent = devUser?.email?.toLowerCase() === persona.email.toLowerCase();
-            return (
-              <button
-                key={persona.id}
-                onClick={() => handleSwitchDevUser(persona.id, persona.name, persona.email, persona.role)}
-                className={`p-4 rounded-2xl border text-left flex flex-col gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] ${
-                  isCurrent
-                    ? 'border-primary bg-primary/10 ring-2 ring-primary/40'
-                    : 'border-border bg-surface-high hover:border-primary/40'
+          <div className="p-4 rounded-2xl border border-border bg-surface-high flex flex-col gap-1.5">
+            <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Account Role</span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-text capitalize">{currentUser?.role || 'student'}</span>
+              <span
+                className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                  currentUser?.role === 'admin'
+                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                    : currentUser?.role === 'faculty'
+                    ? 'bg-purple-500/10 text-purple-400 border-purple-500/30'
+                    : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-2xl">{persona.avatar}</span>
-                  {isCurrent && (
-                    <span className="px-2 py-0.5 rounded-full bg-primary text-white text-[10px] font-bold">
-                      Active
-                    </span>
-                  )}
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-text">{persona.name}</div>
-                  <div className="text-[10px] text-text-muted font-mono">{persona.email}</div>
-                  <div className="text-[11px] text-text-muted mt-1 leading-snug">{persona.desc}</div>
-                </div>
-              </button>
-            );
-          })}
+                {currentUser?.role || 'student'}
+              </span>
+            </div>
+            <p className="text-[10px] text-text-muted mt-1">
+              Role permissions are verified cryptographically by backend session tokens.
+            </p>
+          </div>
+
+          <div className="p-4 rounded-2xl border border-border bg-surface-high flex flex-col gap-1.5">
+            <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Account State</span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-emerald-400 capitalize">{currentUser?.status || 'active'}</span>
+              <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                Verified
+              </span>
+            </div>
+            <p className="text-[10px] text-text-muted mt-1 truncate">
+              {currentUser?.email || 'Authenticated User'}
+            </p>
+          </div>
+
+          <div className="p-4 rounded-2xl border border-border bg-surface-high flex flex-col gap-1.5">
+            <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Session Security</span>
+            <span className="text-sm font-bold text-text">HttpOnly SameSite</span>
+            <p className="text-[10px] text-text-muted mt-1">
+              Protected against XSS token harvesting. Authoritative Firebase ID token exchange.
+            </p>
+          </div>
         </div>
       </div>
 

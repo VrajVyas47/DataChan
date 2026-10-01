@@ -14,7 +14,7 @@ import {
 } from '../../errors';
 import { config } from '../../config';
 
-function sanitizeDocumentIds(item: any): any {
+export function sanitizeDocumentIds(item: any): any {
   if (item === null || item === undefined) return item;
   if (Array.isArray(item)) {
     return item.map(sanitizeDocumentIds);

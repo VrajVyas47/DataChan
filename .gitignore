@@ -10,10 +10,18 @@ yarn-error.log*
 
 # Environment files
 .env
+.env.*
+*.env
+*.env.local
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+**/.env
+**/.env.local
+
+# Build info
+*.tsbuildinfo
 
 # OS Files
 .DS_Store
@@ -31,3 +39,7 @@ coverage/
 
 # Reference assets (if kept local)
 # reference/
+
+# Internal Architecture & SRS Reference (Private)
+docs/SRS_AND_SYSTEM_ARCHITECTURE.md
+scratch/

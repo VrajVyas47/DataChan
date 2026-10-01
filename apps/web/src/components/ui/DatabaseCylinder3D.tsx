@@ -300,20 +300,32 @@ export function DatabaseCylinder3D() {
       <canvas ref={canvasRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
 
       {/* Floating Interactive Database Pills orbiting cylinder */}
-      <div className="absolute top-12 left-6 sm:left-12 px-3 py-1.5 rounded-full bg-surface-elevated/80 backdrop-blur-md border border-primary/30 text-[11px] font-mono font-bold text-primary shadow-lg animate-bounce pointer-events-none">
+      <div
+        style={{ backgroundColor: 'var(--color-surface-elevated, #ffffff)' }}
+        className="absolute top-12 left-6 sm:left-12 px-3 py-1.5 rounded-full bg-surface-elevated border border-primary/30 text-[11px] font-mono font-bold text-primary shadow-lg animate-bounce pointer-events-none"
+      >
         <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block mr-1.5 animate-pulse"></span>
         COLLSCAN · 1.4ms
       </div>
 
-      <div className="absolute top-28 right-4 sm:right-10 px-3 py-1.5 rounded-full bg-surface-elevated/80 backdrop-blur-md border border-cyan-500/30 text-[11px] font-mono font-bold text-cyan-400 shadow-lg pointer-events-none">
+      <div
+        style={{ backgroundColor: 'var(--color-surface-elevated, #ffffff)' }}
+        className="absolute top-28 right-4 sm:right-10 px-3 py-1.5 rounded-full bg-surface-elevated border border-cyan-500/30 text-[11px] font-mono font-bold text-cyan-400 shadow-lg pointer-events-none"
+      >
         &#123; &quot;$match&quot;: &quot;enrolled&quot; &#125;
       </div>
 
-      <div className="absolute bottom-20 left-8 sm:left-16 px-3 py-1.5 rounded-full bg-surface-elevated/80 backdrop-blur-md border border-secondary/30 text-[11px] font-mono font-bold text-secondary shadow-lg pointer-events-none">
+      <div
+        style={{ backgroundColor: 'var(--color-surface-elevated, #ffffff)' }}
+        className="absolute bottom-20 left-8 sm:left-16 px-3 py-1.5 rounded-full bg-surface-elevated border border-secondary/30 text-[11px] font-mono font-bold text-secondary shadow-lg pointer-events-none"
+      >
         db.students.aggregate(...)
       </div>
 
-      <div className="absolute bottom-12 right-8 sm:right-16 px-3 py-1.5 rounded-full bg-surface-elevated/80 backdrop-blur-md border border-emerald-500/30 text-[11px] font-mono font-bold text-emerald-400 shadow-lg pointer-events-none">
+      <div
+        style={{ backgroundColor: 'var(--color-surface-elevated, #ffffff)' }}
+        className="absolute bottom-12 right-8 sm:right-16 px-3 py-1.5 rounded-full bg-surface-elevated border border-emerald-500/30 text-[11px] font-mono font-bold text-emerald-400 shadow-lg pointer-events-none"
+      >
         BSON Platter 0 · ObjectId(&quot;...&quot;)
       </div>
     </div>

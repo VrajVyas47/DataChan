@@ -1,11 +1,13 @@
 import { createApp } from './server/app';
 import { connectMongo } from './database/mongoClient';
+import { initializePlatformSchema } from './database/schema';
 import { config } from './config';
 import { logger } from './logging/logger';
 
 async function bootstrap() {
   try {
     await connectMongo();
+    await initializePlatformSchema();
 
     const app = createApp();
     app.listen(config.port, () => {

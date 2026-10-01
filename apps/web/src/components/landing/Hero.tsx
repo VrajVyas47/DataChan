@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { ArrowRight, Sparkles, Terminal } from 'lucide-react';
+import { ArrowRight, Sparkles, Terminal, MessagesSquare } from 'lucide-react';
 
 export function Hero() {
   return (
@@ -59,11 +59,19 @@ export function Hero() {
             </Link>
 
             <Link
+              href="/forum"
+              className="px-6 py-3.5 rounded-full bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-white text-xs font-montserrat font-semibold tracking-wide transition-all flex items-center gap-2"
+            >
+              <MessagesSquare className="w-3.5 h-3.5 text-blue-400" />
+              <span>Community Forum</span>
+            </Link>
+
+            <Link
               href="/login"
               className="px-6 py-3.5 rounded-full bg-white/[0.03] hover:bg-white/[0.08] text-white/80 text-xs font-montserrat font-semibold tracking-wide transition-all flex items-center gap-2"
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-400/80" />
-              <span>1-Click Google Login</span>
+              <span>1-Click Lab Personas</span>
             </Link>
           </div>
 

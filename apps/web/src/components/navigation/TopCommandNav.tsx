@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTheme, NavPosition } from '@/lib/theme';
 import { api } from '@/lib/api';
+import { logoutUser } from '@/lib/firebase';
 import { UserProfile } from '@datachan/shared-types';
 import { AnimatedIcon } from '@/components/ui/AnimatedIcon';
 import {
@@ -30,6 +31,8 @@ import {
   Sun,
   Moon,
   Check,
+  MessagesSquare,
+  Shield,
 } from 'lucide-react';
 
 export function TopCommandNav() {
@@ -54,7 +57,8 @@ export function TopCommandNav() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [popupPlacement, setPopupPlacement] = useState<'up' | 'down' | 'left' | 'right'>('up');
+  const [themePopoverStyle, setThemePopoverStyle] = useState<React.CSSProperties>({});
+  const [userPopoverStyle, setUserPopoverStyle] = useState<React.CSSProperties>({});
 
   const themeButtonRef = useRef<HTMLButtonElement>(null);
   const userButtonRef = useRef<HTMLButtonElement>(null);
@@ -93,42 +97,127 @@ export function TopCommandNav() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Compute collision-aware popover placement
-  const calculatePlacement = (buttonEl: HTMLElement | null): 'up' | 'down' | 'left' | 'right' => {
-    if (navPosition === 'left') return 'right';
-    if (navPosition === 'right') return 'left';
-    if (navPosition === 'top') return 'down';
-    if (navPosition === 'bottom') return 'up';
-
-    if (buttonEl) {
-      const rect = buttonEl.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const spaceAbove = rect.top;
-      return spaceBelow < 400 && spaceAbove > spaceBelow ? 'up' : 'down';
+  // Viewport-aware collision-free popover style calculator
+  const getPopoverStyle = (
+    buttonEl: HTMLElement | null,
+    pos: NavPosition,
+    popoverWidth: number,
+    popoverHeight: number = 380
+  ): React.CSSProperties => {
+    if (!buttonEl || typeof window === 'undefined') {
+      return { position: 'fixed', zIndex: 99999 };
     }
-    return 'up';
+    const rect = buttonEl.getBoundingClientRect();
+    const vW = window.innerWidth;
+    const vH = window.innerHeight;
+    const padding = 12;
+
+    let top: number | undefined;
+    let bottom: number | undefined;
+    let left: number | undefined;
+    let right: number | undefined;
+
+    if (pos === 'bottom') {
+      // DOCK AT BOTTOM: Open UPWARDS into viewport with 12px clearance
+      bottom = Math.max(padding, vH - rect.top + 12);
+      const preferredRight = vW - rect.right;
+      if (preferredRight + popoverWidth > vW - padding) {
+        left = padding;
+      } else {
+        right = Math.max(padding, preferredRight);
+      }
+    } else if (pos === 'top') {
+      // DOCK AT TOP: Open DOWNWARDS into viewport with 12px clearance
+      top = Math.max(padding, rect.bottom + 12);
+      const preferredRight = vW - rect.right;
+      if (preferredRight + popoverWidth > vW - padding) {
+        left = padding;
+      } else {
+        right = Math.max(padding, preferredRight);
+      }
+    } else if (pos === 'right') {
+      // DOCK AT RIGHT: Open INWARD TO THE LEFT of the dock
+      right = Math.max(padding, vW - rect.left + 12);
+      let targetTop = rect.top + rect.height / 2 - popoverHeight / 2;
+      if (targetTop < padding) targetTop = padding;
+      if (targetTop + popoverHeight > vH - padding) {
+        targetTop = Math.max(padding, vH - popoverHeight - padding);
+      }
+      top = targetTop;
+    } else if (pos === 'left') {
+      // DOCK AT LEFT: Open INWARD TO THE RIGHT of the dock
+      left = Math.max(padding, rect.right + 12);
+      let targetTop = rect.top + rect.height / 2 - popoverHeight / 2;
+      if (targetTop < padding) targetTop = padding;
+      if (targetTop + popoverHeight > vH - padding) {
+        targetTop = Math.max(padding, vH - popoverHeight - padding);
+      }
+      top = targetTop;
+    }
+
+    return {
+      position: 'fixed',
+      zIndex: 99999,
+      top: top !== undefined ? `${Math.round(top)}px` : undefined,
+      bottom: bottom !== undefined ? `${Math.round(bottom)}px` : undefined,
+      left: left !== undefined ? `${Math.round(left)}px` : undefined,
+      right: right !== undefined ? `${Math.round(right)}px` : undefined,
+      width: `${popoverWidth}px`,
+      maxWidth: `calc(100vw - 24px)`,
+      maxHeight: `calc(100vh - 32px)`,
+    };
   };
 
   const handleToggleThemeMenu = () => {
     if (!themeMenuOpen) {
-      setPopupPlacement(calculatePlacement(themeButtonRef.current));
       setUserMenuOpen(false);
+      if (themeButtonRef.current) {
+        setThemePopoverStyle(getPopoverStyle(themeButtonRef.current, navPosition, 320, 520));
+      }
+      setThemeMenuOpen(true);
+    } else {
+      setThemeMenuOpen(false);
     }
-    setThemeMenuOpen(!themeMenuOpen);
   };
 
   const handleToggleUserMenu = () => {
     if (!userMenuOpen) {
-      setPopupPlacement(calculatePlacement(userButtonRef.current));
       setThemeMenuOpen(false);
+      if (userButtonRef.current) {
+        setUserPopoverStyle(getPopoverStyle(userButtonRef.current, navPosition, 260, 260));
+      }
+      setUserMenuOpen(true);
+    } else {
+      setUserMenuOpen(false);
     }
-    setUserMenuOpen(!userMenuOpen);
   };
 
-  const handleLogout = () => {
-    api.logout();
+  // Re-calculate positions on window resize or scroll
+  useEffect(() => {
+    const handleReposition = () => {
+      if (themeMenuOpen && themeButtonRef.current) {
+        setThemePopoverStyle(getPopoverStyle(themeButtonRef.current, navPosition, 320, 520));
+      }
+      if (userMenuOpen && userButtonRef.current) {
+        setUserPopoverStyle(getPopoverStyle(userButtonRef.current, navPosition, 260, 260));
+      }
+    };
+    window.addEventListener('resize', handleReposition);
+    window.addEventListener('scroll', handleReposition, true);
+    return () => {
+      window.removeEventListener('resize', handleReposition);
+      window.removeEventListener('scroll', handleReposition, true);
+    };
+  }, [themeMenuOpen, userMenuOpen, navPosition]);
+
+  const handleLogout = async () => {
     setUserMenuOpen(false);
-    router.push('/login');
+    try {
+      await api.logout();
+      await logoutUser();
+    } finally {
+      router.push('/login');
+    }
   };
 
   // Cycle through all 4 dock orientations: bottom -> top -> right -> left -> bottom
@@ -148,6 +237,7 @@ export function TopCommandNav() {
     { label: 'Learn', href: '/learn', icon: BookOpen },
     { label: 'Challenges', href: '/challenges', icon: Trophy },
     { label: 'Data Modeler', href: '/modeler', icon: Boxes },
+    { label: 'Forum', href: '/forum', icon: MessagesSquare },
   ];
 
   const colorPresets = [
@@ -169,12 +259,12 @@ export function TopCommandNav() {
   };
 
   const barClasses = {
-    top: 'h-16 md:h-18 w-full max-w-[1720px] mx-auto bg-surface-elevated/95 backdrop-blur-xl text-text rounded-full px-3 sm:px-6 flex items-center justify-between border border-border/80 shadow-floating pointer-events-auto transition-all',
+    top: 'h-16 md:h-18 w-full max-w-[1720px] mx-auto bg-surface-elevated text-text rounded-full px-3 sm:px-6 flex items-center justify-between border border-border shadow-floating pointer-events-auto transition-all',
     bottom:
-      'h-16 md:h-18 w-full max-w-[1600px] mx-auto bg-surface-elevated/95 backdrop-blur-xl text-text rounded-full px-3 sm:px-6 flex items-center justify-between border border-border/80 shadow-floating pointer-events-auto transition-all',
-    left: 'w-18 md:w-20 bg-surface-elevated/95 backdrop-blur-xl text-text rounded-3xl p-2.5 flex flex-col items-center justify-between border border-border/80 shadow-floating pointer-events-auto transition-all max-h-[92vh] gap-2',
+      'h-16 md:h-18 w-full max-w-[1600px] mx-auto bg-surface-elevated text-text rounded-full px-3 sm:px-6 flex items-center justify-between border border-border shadow-floating pointer-events-auto transition-all',
+    left: 'w-18 md:w-20 bg-surface-elevated text-text rounded-3xl p-2.5 flex flex-col items-center justify-between border border-border shadow-floating pointer-events-auto transition-all max-h-[92vh] gap-2',
     right:
-      'w-18 md:w-20 bg-surface-elevated/95 backdrop-blur-xl text-text rounded-3xl p-2.5 flex flex-col items-center justify-between border border-border/80 shadow-floating pointer-events-auto transition-all max-h-[92vh] gap-2',
+      'w-18 md:w-20 bg-surface-elevated text-text rounded-3xl p-2.5 flex flex-col items-center justify-between border border-border shadow-floating pointer-events-auto transition-all max-h-[92vh] gap-2',
   };
 
   if (pathname === '/login') {
@@ -182,10 +272,17 @@ export function TopCommandNav() {
   }
 
   // --- REUSABLE THEME POPOVER ---
-  const renderThemePopover = (extraClasses: string) => (
+  const renderThemePopover = (style: React.CSSProperties) => (
     <div
       ref={themeMenuRef}
-      className={`absolute ${extraClasses} w-80 max-h-[82vh] overflow-y-auto bg-surface border border-border rounded-2xl shadow-popover p-4 z-[100] flex flex-col gap-3.5 backdrop-blur-md text-text`}
+      style={{
+        ...style,
+        backgroundColor: 'var(--color-surface-elevated, #ffffff)',
+        opacity: 1,
+        backdropFilter: 'none',
+        WebkitBackdropFilter: 'none',
+      }}
+      className="overflow-y-auto bg-surface-elevated border border-border rounded-2xl shadow-popover p-4 flex flex-col gap-3.5 text-text ring-1 ring-border/50"
     >
       <div className="flex items-center justify-between pb-2 border-b border-border">
         <div className="flex items-center gap-1.5 text-xs font-bold text-text uppercase tracking-wider">
@@ -207,11 +304,14 @@ export function TopCommandNav() {
       {/* Appearance: Mode */}
       <div>
         <div className="text-[10px] font-bold text-text-muted uppercase mb-1.5">Appearance</div>
-        <div className="grid grid-cols-2 gap-1.5 p-1 bg-surface-high rounded-xl">
+        <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl" style={{ backgroundColor: 'var(--color-surface-high)' }}>
           <button
             onClick={() => setThemeMode('light')}
+            style={{
+              backgroundColor: themeMode === 'light' ? 'var(--color-surface, #ffffff)' : 'transparent',
+            }}
             className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${
-              themeMode === 'light' ? 'bg-surface text-text shadow-sm' : 'text-text-muted hover:text-text'
+              themeMode === 'light' ? 'text-text shadow-sm' : 'text-text-muted hover:text-text'
             }`}
           >
             <Sun className="w-3.5 h-3.5 text-amber-500" />
@@ -219,8 +319,11 @@ export function TopCommandNav() {
           </button>
           <button
             onClick={() => setThemeMode('dark')}
+            style={{
+              backgroundColor: themeMode === 'dark' ? 'var(--color-surface, #12131a)' : 'transparent',
+            }}
             className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${
-              themeMode === 'dark' ? 'bg-surface text-text shadow-sm' : 'text-text-muted hover:text-text'
+              themeMode === 'dark' ? 'text-text shadow-sm' : 'text-text-muted hover:text-text'
             }`}
           >
             <Moon className="w-3.5 h-3.5 text-indigo-400" />
@@ -242,10 +345,15 @@ export function TopCommandNav() {
               <button
                 key={p.id}
                 onClick={() => setColorPalette(p.id)}
+                style={{
+                  backgroundColor: isSelected
+                    ? 'var(--color-primary-fixed)'
+                    : 'var(--color-surface, #ffffff)',
+                }}
                 className={`p-2 rounded-xl border flex flex-col gap-1.5 transition-all text-left ${
                   isSelected
-                    ? 'border-primary bg-primary/10 ring-1 ring-primary'
-                    : 'border-border/60 bg-surface-high/60 hover:border-border'
+                    ? 'border-primary ring-1 ring-primary'
+                    : 'border-border hover:border-text-muted'
                 }`}
               >
                 <div className="flex items-center justify-between">
@@ -306,16 +414,36 @@ export function TopCommandNav() {
   );
 
   // --- REUSABLE PROFILE / USER POPOVER ---
-  const renderProfilePopover = (extraClasses: string) => (
+  const renderProfilePopover = (style: React.CSSProperties) => (
     <div
       ref={userMenuRef}
-      className={`absolute ${extraClasses} w-60 max-h-[82vh] overflow-y-auto bg-surface border border-border rounded-2xl shadow-popover p-2 z-[100] flex flex-col gap-1 text-text backdrop-blur-md`}
+      style={{
+        ...style,
+        backgroundColor: 'var(--color-surface-elevated, #ffffff)',
+        opacity: 1,
+        backdropFilter: 'none',
+        WebkitBackdropFilter: 'none',
+      }}
+      className="overflow-y-auto bg-surface-elevated border border-border rounded-2xl shadow-popover p-2 flex flex-col gap-1 text-text ring-1 ring-border/50"
     >
       <div className="px-3 py-2 border-b border-border">
-        <div className="font-bold text-xs text-text truncate">
-          {profile?.displayName || 'Vraj (Demo Student)'}
+        <div className="flex items-center justify-between gap-2">
+          <div className="font-bold text-xs text-text truncate">
+            {profile?.displayName || 'Vraj (Demo Student)'}
+          </div>
+          <span
+            className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border ${
+              profile?.role === 'admin'
+                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                : profile?.role === 'faculty'
+                ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+            }`}
+          >
+            {profile?.role || 'student'}
+          </span>
         </div>
-        <div className="text-[11px] text-text-muted truncate">
+        <div className="text-[11px] text-text-muted truncate mt-0.5">
           {profile?.email || 'vraj@data-chan.edu'}
         </div>
         <div className="mt-1 flex items-center gap-1 text-[10px] text-primary font-mono font-bold">
@@ -324,6 +452,17 @@ export function TopCommandNav() {
           <span>{profile?.xp || 0} XP</span>
         </div>
       </div>
+
+      {profile?.role === 'admin' && process.env.NEXT_PUBLIC_ENABLE_ADMIN_PORTAL === 'true' && (
+        <Link
+          href="/admin"
+          onClick={() => setUserMenuOpen(false)}
+          className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-colors"
+        >
+          <Shield className="w-3.5 h-3.5" />
+          <span>Admin Telemetry Portal</span>
+        </Link>
+      )}
 
       <Link
         href="/profile"
@@ -363,7 +502,7 @@ export function TopCommandNav() {
 
     return (
       <header className={positionClasses[navPosition]}>
-        <div className={barClasses[navPosition]}>
+        <div className={barClasses[navPosition]} style={{ backgroundColor: 'var(--color-surface-elevated)' }}>
           {/* Logo / Brand */}
           <Link
             href="/dashboard"
@@ -451,7 +590,7 @@ export function TopCommandNav() {
                   Theme Palette
                 </div>
               </button>
-              {themeMenuOpen && renderThemePopover(popoverPositionClass)}
+              {themeMenuOpen && renderThemePopover(themePopoverStyle)}
             </div>
 
             {/* Settings Link */}
@@ -480,7 +619,7 @@ export function TopCommandNav() {
               >
                 <User className="w-3.5 h-3.5" />
               </button>
-              {userMenuOpen && renderProfilePopover(popoverPositionClass)}
+              {userMenuOpen && renderProfilePopover(userPopoverStyle)}
             </div>
           </div>
         </div>
@@ -494,7 +633,7 @@ export function TopCommandNav() {
 
   return (
     <header className={positionClasses[navPosition]}>
-      <div className={barClasses[navPosition]}>
+      <div className={barClasses[navPosition]} style={{ backgroundColor: 'var(--color-surface-elevated)' }}>
         {/* Brand / Logo */}
         <Link href="/dashboard" className="flex items-center gap-2.5 group shrink-0">
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-primary flex items-center justify-center text-white shadow-md group-hover:scale-105 transition-transform">
@@ -591,7 +730,7 @@ export function TopCommandNav() {
               <ChevronDown className="w-3 h-3 opacity-60" />
             </button>
 
-            {themeMenuOpen && renderThemePopover(`${popoverPositionClass} right-0 sm:right-auto sm:left-1/2 sm:-translate-x-1/2`)}
+            {themeMenuOpen && renderThemePopover(themePopoverStyle)}
           </div>
 
           {/* Settings Link */}
@@ -614,7 +753,7 @@ export function TopCommandNav() {
               <User className="w-4 h-4" />
             </button>
 
-            {userMenuOpen && renderProfilePopover(`${popoverPositionClass} right-0`)}
+            {userMenuOpen && renderProfilePopover(userPopoverStyle)}
           </div>
         </div>
       </div>

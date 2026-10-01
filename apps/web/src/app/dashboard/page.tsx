@@ -8,6 +8,7 @@ import {
   VirtualDatabase,
   QueryHistoryItem,
   Lesson,
+  Classroom,
 } from '@datachan/shared-types';
 import {
   Database,
@@ -22,28 +23,99 @@ import {
   CheckCircle2,
   Clock,
   Plus,
+  GraduationCap,
+  Users,
+  KeyRound,
+  Copy,
+  Check,
+  X,
+  Shield,
+  Activity,
+  FileText,
+  CheckCheck,
+  TrendingUp,
+  UserCheck,
+  RefreshCw,
+  Play,
+  Flame,
+  AlertCircle,
+  Trash2,
+  ExternalLink,
 } from 'lucide-react';
 
 export default function DashboardPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [currentView, setCurrentView] = useState<'student' | 'faculty' | 'admin'>('student');
   const [databases, setDatabases] = useState<VirtualDatabase[]>([]);
   const [recentQueries, setRecentQueries] = useState<QueryHistoryItem[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [classrooms, setClassrooms] = useState<{ teaching: Classroom[]; enrolled: Classroom[] }>({
+    teaching: [],
+    enrolled: [],
+  });
+
+  // Modal & Cohort states
+  const [joinModalOpen, setJoinModalOpen] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [rosterModalOpen, setRosterModalOpen] = useState(false);
+  const [activeCohortForRoster, setActiveCohortForRoster] = useState<Classroom | null>(null);
+  const [cohortRoster, setCohortRoster] = useState<any[]>([]);
+  const [loadingRoster, setLoadingRoster] = useState(false);
+
+  // Form states
+  const [joinCodeInput, setJoinCodeInput] = useState('');
+  const [newClassName, setNewClassName] = useState('');
+  const [newClassDesc, setNewClassDesc] = useState('');
+  const [newClassCode, setNewClassCode] = useState('');
+  const [cohortMsg, setCohortMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [submittingCohort, setSubmittingCohort] = useState(false);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  // Faculty Assignment state
+  const [assignedPracticals, setAssignedPracticals] = useState<Record<string, boolean>>({
+    'lesson-1-mongodb-basics': true,
+    'lesson-2-databases-and-collections': true,
+  });
+  const [dispatchMsg, setDispatchMsg] = useState<string | null>(null);
+
+  // Admin states
+  const [adminStats, setAdminStats] = useState<any | null>(null);
+  const [adminUsers, setAdminUsers] = useState<any[]>([]);
+  const [cleaningOrphans, setCleaningOrphans] = useState(false);
+  const [cleanMsg, setCleanMsg] = useState<string | null>(null);
+  const [roleUpdatingUser, setRoleUpdatingUser] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadDashboard() {
       try {
-        const [me, dbs, history, allLessons] = await Promise.all([
+        const [me, dbs, history, allLessons, myClassrooms] = await Promise.all([
           api.getMe(),
           api.listDatabases(),
-          api.getQueryHistory(5),
+          api.getQueryHistory(6),
           api.listLessons(),
+          api.listMyClassrooms().catch(() => ({ teaching: [], enrolled: [] })),
         ]);
+
         setProfile(me);
+        // Automatically default view to authenticated role
+        if (me.role === 'faculty' || me.role === 'admin') {
+          setCurrentView(me.role);
+        } else {
+          setCurrentView('student');
+        }
+
         setDatabases(dbs);
         setRecentQueries(history);
         setLessons(allLessons);
+        setClassrooms(myClassrooms);
+
+        // Preload admin stats if admin or faculty
+        if (me.role === 'admin' || me.role === 'faculty') {
+          api.getAdminStats().then(setAdminStats).catch(() => {});
+          api.listAdminUsers().then(setAdminUsers).catch(() => {});
+        }
       } catch (err) {
         console.error('Failed to load dashboard data:', err);
       } finally {
@@ -52,6 +124,112 @@ export default function DashboardPage() {
     }
     loadDashboard();
   }, []);
+
+  const handleJoinClassroom = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!joinCodeInput.trim()) return;
+    setSubmittingCohort(true);
+    setCohortMsg(null);
+    try {
+      const joined = await api.joinClassroom(joinCodeInput.trim());
+      setCohortMsg({ type: 'success', text: `Enrolled successfully into ${joined.name}!` });
+      setClassrooms((prev) => ({
+        ...prev,
+        enrolled: [...prev.enrolled.filter((c) => c.id !== joined.id), joined],
+      }));
+      setJoinCodeInput('');
+      setTimeout(() => {
+        setJoinModalOpen(false);
+        setCohortMsg(null);
+      }, 1800);
+    } catch (err: any) {
+      setCohortMsg({ type: 'error', text: err.message || 'Failed to join classroom' });
+    } finally {
+      setSubmittingCohort(false);
+    }
+  };
+
+  const handleCreateClassroom = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newClassName.trim()) return;
+    setSubmittingCohort(true);
+    setCohortMsg(null);
+    try {
+      const created = await api.createClassroom(
+        newClassName.trim(),
+        newClassDesc.trim(),
+        newClassCode.trim() || undefined
+      );
+      setCohortMsg({ type: 'success', text: `Created cohort ${created.name} with code: ${created.code}!` });
+      setClassrooms((prev) => ({ ...prev, teaching: [...prev.teaching, created] }));
+      setNewClassName('');
+      setNewClassDesc('');
+      setNewClassCode('');
+      setTimeout(() => {
+        setCreateModalOpen(false);
+        setCohortMsg(null);
+      }, 2000);
+    } catch (err: any) {
+      setCohortMsg({ type: 'error', text: err.message || 'Failed to create classroom' });
+    } finally {
+      setSubmittingCohort(false);
+    }
+  };
+
+  const handleOpenRoster = async (cohort: Classroom) => {
+    setActiveCohortForRoster(cohort);
+    setRosterModalOpen(true);
+    setLoadingRoster(true);
+    try {
+      const res = await api.getClassroomRoster(cohort.id);
+      setCohortRoster(res.roster || []);
+    } catch (err: any) {
+      setCohortRoster([]);
+    } finally {
+      setLoadingRoster(false);
+    }
+  };
+
+  const handleCopyCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 2000);
+  };
+
+  const handleDispatchPractical = (lessonId: string, lessonTitle: string) => {
+    setAssignedPracticals((prev) => ({ ...prev, [lessonId]: true }));
+    setDispatchMsg(`Practical "${lessonTitle}" dispatched to cohort syllabus!`);
+    setTimeout(() => setDispatchMsg(null), 3500);
+  };
+
+  const handleCleanOrphans = async () => {
+    setCleaningOrphans(true);
+    setCleanMsg(null);
+    try {
+      const res = await api.cleanOrphanedDatabases();
+      setCleanMsg(`Reclaimed ${res.deletedCount || 0} orphaned databases.`);
+      const stats = await api.getAdminStats();
+      setAdminStats(stats);
+    } catch (err: any) {
+      setCleanMsg(`Cleanup error: ${err.message}`);
+    } finally {
+      setCleaningOrphans(false);
+    }
+  };
+
+  const handleUpdateRole = async (userId: string, newRole: string) => {
+    setRoleUpdatingUser(userId);
+    try {
+      await api.updateAdminUserRole(userId, newRole);
+      setAdminUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
+      );
+    } catch (err: any) {
+      alert(err.message || 'Failed to update role');
+    } finally {
+      setRoleUpdatingUser(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -67,285 +245,1072 @@ export default function DashboardPage() {
   const activeDb = databases.find((d) => d.id === profile?.activeDatabaseId) || databases[0];
   const completedLessonsCount = profile?.lessonsCompletedCount || 0;
   const progressPercent = Math.min(100, Math.round((completedLessonsCount / (lessons.length || 1)) * 100));
+  const nextLesson = lessons.find((l) => !l.completed) || lessons[0];
 
   return (
-    <div className="flex flex-col gap-6 w-full">
-      {/* Top Welcome & Context */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-text-main">
-            Welcome back, {profile?.displayName || profile?.username || 'Student'}
-          </h1>
-          <p className="text-sm text-text-muted mt-1">
-            Data-Chan Virtual Database Lab &bull; Learn By Building And Learn By Querying
-          </p>
+    <div className="flex flex-col gap-6 w-full pb-10">
+      {/* ========================================================================= */}
+      {/* 1. ROLE VIEW SELECTOR BAR (For instant persona switching & hackathon demo) */}
+      {/* ========================================================================= */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-3.5 bg-surface-low rounded-2xl border border-border">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
+            {profile?.role === 'faculty' ? (
+              <GraduationCap className="w-4 h-4" />
+            ) : profile?.role === 'admin' ? (
+              <Shield className="w-4 h-4" />
+            ) : (
+              <BookOpen className="w-4 h-4" />
+            )}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-text-main">
+                {profile?.displayName || profile?.username || 'User'}
+              </span>
+              <span
+                className={`text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-full border ${
+                  profile?.role === 'faculty'
+                    ? 'bg-secondary/15 text-secondary border-secondary/30'
+                    : profile?.role === 'admin'
+                    ? 'bg-error/15 text-error border-error/30'
+                    : 'bg-primary/15 text-primary border-primary/30'
+                }`}
+              >
+                Account Role: {profile?.role || 'student'}
+              </span>
+            </div>
+            <p className="text-[11px] text-text-muted">
+              Select a specialized dashboard view below to preview role-based interfaces
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/workspace"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary text-white text-xs font-bold hover:bg-primary/90 transition-all shadow-sm"
+
+        {/* View Switcher Pills */}
+        <div className="flex items-center bg-surface border border-border p-1 rounded-xl gap-1 self-start md:self-auto">
+          <button
+            onClick={() => setCurrentView('student')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+              currentView === 'student'
+                ? 'bg-primary text-white shadow-sm'
+                : 'text-text-muted hover:text-text-main'
+            }`}
           >
-            <Plus className="w-4 h-4" />
-            <span>Open Workspace</span>
-          </Link>
-          <Link
-            href="/playground"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-surface-high hover:bg-surface-low text-text-main text-xs font-bold transition-all border border-border"
+            <span>👨‍🎓 Student Lab</span>
+          </button>
+          <button
+            onClick={() => setCurrentView('faculty')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+              currentView === 'faculty'
+                ? 'bg-secondary text-white shadow-sm'
+                : 'text-text-muted hover:text-text-main'
+            }`}
           >
-            <Terminal className="w-4 h-4" />
-            <span>Playground</span>
-          </Link>
+            <span>🎓 Faculty Portal</span>
+            {classrooms.teaching.length > 0 && (
+              <span className="text-[10px] font-mono px-1.5 rounded-full bg-white/20">
+                {classrooms.teaching.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setCurrentView('admin')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+              currentView === 'admin'
+                ? 'bg-error text-white shadow-sm'
+                : 'text-text-muted hover:text-text-main'
+            }`}
+          >
+            <span>🛡️ Admin Telemetry</span>
+          </button>
         </div>
       </div>
 
-      {/* Main 12-Column Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 w-full items-start">
-        {/* LEFT COLUMN: Hero Feature + Metrics (Span 4) */}
-        <div className="xl:col-span-4 flex flex-col gap-6">
-          {/* Hero Feature Card */}
-          <div className="relative overflow-hidden bg-primary text-white rounded-2xl p-6 shadow-md flex flex-col justify-between min-h-[280px]">
-            <div className="absolute -top-12 -right-12 w-44 h-44 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+      {/* ========================================================================= */}
+      {/* 2. CONDITIONAL VIEW RENDERING BASED ON CURRENT VIEW                       */}
+      {/* ========================================================================= */}
+
+      {/* ------------------------------------------------------------------------- */}
+      {/* VIEW A: STUDENT DASHBOARD                                                 */}
+      {/* ------------------------------------------------------------------------- */}
+      {currentView === 'student' && (
+        <div className="flex flex-col gap-6">
+          {/* Top Welcome & Actions */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold tracking-wider uppercase mb-3">
-                <Sparkles className="w-3.5 h-3.5 text-secondary" />
-                <span>MongoDB MQL Lab</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono font-bold text-primary tracking-widest uppercase">
+                  Student Learning Console
+                </span>
+                <span className="text-text-muted text-xs">&bull;</span>
+                <span className="text-xs text-text-muted font-medium">Level {profile?.level || 1} Scholar</span>
               </div>
-              <h2 className="text-2xl font-extrabold tracking-tight leading-tight">
-                Mastering Document Queries
-              </h2>
-              <p className="text-xs text-white/80 mt-2 leading-relaxed">
-                Execute safe queries, design flexible BSON models, and solve interactive database challenges.
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-text-main mt-0.5">
+                Welcome back, {profile?.displayName || profile?.username || 'Student'}
+              </h1>
+              <p className="text-xs sm:text-sm text-text-muted mt-1">
+                Data-Chan Virtual Database Lab &bull; Hands-on MQL Practicals, Query ASTs &amp; Sandboxes
               </p>
             </div>
-
-            <div className="flex items-end justify-between mt-6 pt-2">
+            <div className="flex items-center gap-2">
               <Link
                 href="/learn"
-                className="inline-flex items-center justify-center w-11 h-11 rounded-full bg-white text-primary hover:scale-105 transition-transform shadow-md group"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary text-white text-xs font-bold hover:bg-primary/90 transition-all shadow-sm"
               >
-                <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-0.5" />
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>Run Practical</span>
               </Link>
-              <div className="text-right">
-                <span className="text-[11px] font-mono text-white/70 block uppercase">Curriculum</span>
-                <span className="text-sm font-bold text-white">
-                  {completedLessonsCount} of {lessons.length} Completed
-                </span>
-              </div>
+              <Link
+                href="/workspace"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-surface-high hover:bg-surface-low text-text-main text-xs font-bold transition-all border border-border"
+              >
+                <Database className="w-3.5 h-3.5" />
+                <span>Workspace</span>
+              </Link>
             </div>
           </div>
 
-          {/* Dual Metrics Row */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-surface-low rounded-xl p-4 flex flex-col justify-between border border-border/60 shadow-sm">
+          {/* 4 Stat Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-surface-low rounded-2xl p-4 border border-border/70 flex flex-col justify-between">
               <div className="flex items-center justify-between">
-                <div className="w-8 h-8 rounded-full bg-secondary-container/20 text-secondary flex items-center justify-center">
-                  <Layers className="w-4 h-4" />
-                </div>
-                <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">
-                  Databases
-                </span>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Total XP</span>
+                <Sparkles className="w-4 h-4 text-secondary" />
               </div>
               <div className="mt-3">
-                <span className="text-2xl font-extrabold text-text-main font-mono">
-                  {databases.length}
-                </span>
-                <p className="text-xs text-text-muted mt-0.5 font-medium">Virtual Databases</p>
-              </div>
-            </div>
-
-            <div className="bg-surface-low rounded-xl p-4 flex flex-col justify-between border border-border/60 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div className="w-8 h-8 rounded-full bg-primary-fixed/20 text-primary flex items-center justify-center">
-                  <Terminal className="w-4 h-4" />
-                </div>
-                <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">
-                  Queries
-                </span>
-              </div>
-              <div className="mt-3">
-                <span className="text-2xl font-extrabold text-text-main font-mono">
-                  {profile?.queriesExecutedCount || 0}
-                </span>
-                <p className="text-xs text-text-muted mt-0.5 font-medium">Queries Executed</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Active Database Card */}
-          <div className="bg-inverse-surface text-inverse-text rounded-2xl p-5 shadow-md flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-tertiary animate-pulse"></span>
-                <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-tertiary-fixed">
-                  Active Sandbox DB
-                </span>
-              </div>
-              <span className="text-[11px] font-mono text-text-muted">MongoDB 6.0</span>
-            </div>
-
-            {activeDb ? (
-              <div>
-                <h3 className="text-lg font-bold text-white">{activeDb.name}</h3>
-                <p className="text-xs text-inverse-text/70 mt-0.5">
-                  Namespace: <span className="font-mono text-[11px]">{activeDb.physicalNamespace}</span>
-                </p>
-                <div className="flex items-center gap-4 mt-3 pt-3 border-t border-white/10 text-xs">
-                  <div>
-                    <span className="font-bold text-white font-mono">{activeDb.collectionsCount || 0}</span>{' '}
-                    <span className="text-inverse-text/60">collections</span>
-                  </div>
-                  <div>
-                    <span className="font-bold text-white font-mono">{activeDb.totalDocumentsCount || 0}</span>{' '}
-                    <span className="text-inverse-text/60">documents</span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="py-2 text-center text-xs text-inverse-text/60">
-                No active database selected. Create one in your workspace.
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* CENTER / RIGHT: Learning Progress + Recent Queries + Quick Nav (Span 8) */}
-        <div className="xl:col-span-8 flex flex-col gap-6">
-          {/* Learning Progress Banner */}
-          <div className="bg-surface-low rounded-2xl p-5 border border-border flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-4 w-full sm:w-auto">
-              <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                <BookOpen className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-text-main">MongoDB Core Curriculum</h3>
-                <p className="text-xs text-text-muted mt-0.5">
-                  15 step-by-step interactive lessons from basic documents to advanced aggregation pipelines.
-                </p>
-                <div className="w-full sm:w-64 bg-surface-high h-2 rounded-full mt-2 overflow-hidden">
+                <span className="text-2xl font-black text-text-main font-mono">{profile?.xp || 0}</span>
+                <div className="w-full bg-surface-high h-1.5 rounded-full mt-2 overflow-hidden">
                   <div
-                    className="bg-primary h-full rounded-full transition-all duration-500"
-                    style={{ width: `${progressPercent}%` }}
+                    className="bg-secondary h-full rounded-full"
+                    style={{ width: `${(profile?.xp || 0) % 100}%` }}
                   ></div>
                 </div>
               </div>
             </div>
-            <Link
-              href="/learn"
-              className="px-4 py-2 rounded-full bg-primary text-white text-xs font-bold hover:bg-primary/90 transition-all shrink-0"
-            >
-              Continue Learning
-            </Link>
+
+            <div className="bg-surface-low rounded-2xl p-4 border border-border/70 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Practice Streak</span>
+                <Flame className="w-4 h-4 text-orange-500" />
+              </div>
+              <div className="mt-3">
+                <span className="text-2xl font-black text-text-main font-mono">{profile?.streakDays || 1} Days</span>
+                <p className="text-[11px] text-text-muted mt-1">Keep querying daily</p>
+              </div>
+            </div>
+
+            <div className="bg-surface-low rounded-2xl p-4 border border-border/70 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Practicals</span>
+                <CheckCircle2 className="w-4 h-4 text-tertiary" />
+              </div>
+              <div className="mt-3">
+                <span className="text-2xl font-black text-text-main font-mono">
+                  {completedLessonsCount} / {lessons.length || 15}
+                </span>
+                <p className="text-[11px] text-text-muted mt-1">{progressPercent}% Curriculum progress</p>
+              </div>
+            </div>
+
+            <div className="bg-surface-low rounded-2xl p-4 border border-border/70 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Enrolled Labs</span>
+                <GraduationCap className="w-4 h-4 text-primary" />
+              </div>
+              <div className="mt-3">
+                <span className="text-2xl font-black text-text-main font-mono">
+                  {classrooms.enrolled.length}
+                </span>
+                <p className="text-[11px] text-text-muted mt-1">Academic Cohorts</p>
+              </div>
+            </div>
           </div>
 
-          {/* Quick Laboratory Navigation Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Link
-              href="/workspace"
-              className="bg-surface rounded-xl p-4 border border-border hover:border-primary/50 hover:shadow-soft transition-all group flex flex-col justify-between"
-            >
-              <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Database className="w-5 h-5" />
-              </div>
-              <div className="mt-4">
-                <h4 className="text-sm font-bold text-text-main group-hover:text-primary transition-colors">
-                  Database Explorer
-                </h4>
-                <p className="text-xs text-text-muted mt-1">
-                  Manage collections, browse documents, inspect detected schemas.
-                </p>
-              </div>
-            </Link>
+          {/* Student Center 2-Column Grid */}
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+            {/* Left Column (Span 8) */}
+            <div className="xl:col-span-8 flex flex-col gap-6">
+              {/* Continue Practical Lab Card */}
+              {nextLesson && (
+                <div className="p-6 rounded-2xl bg-gradient-to-r from-primary/10 via-surface-low to-surface-low border border-primary/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-primary text-white flex items-center justify-center shrink-0 shadow-md">
+                      <BookOpen className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono uppercase font-bold px-2 py-0.5 rounded bg-primary/20 text-primary">
+                          Practical Lab #{nextLesson.order || 1}
+                        </span>
+                        <span className="text-xs text-text-muted">&bull;</span>
+                        <span className="text-xs text-text-muted">+{nextLesson.xpReward} XP</span>
+                      </div>
+                      <h3 className="text-lg font-bold text-text-main mt-1">{nextLesson.title}</h3>
+                      <p className="text-xs text-text-muted mt-1 max-w-xl leading-relaxed">
+                        {nextLesson.description}
+                      </p>
+                    </div>
+                  </div>
 
-            <Link
-              href="/challenges"
-              className="bg-surface rounded-xl p-4 border border-border hover:border-secondary/50 hover:shadow-soft transition-all group flex flex-col justify-between"
-            >
-              <div className="w-10 h-10 rounded-full bg-secondary-container/20 text-secondary flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Trophy className="w-5 h-5" />
-              </div>
-              <div className="mt-4">
-                <h4 className="text-sm font-bold text-text-main group-hover:text-secondary transition-colors">
-                  Query Challenges
-                </h4>
-                <p className="text-xs text-text-muted mt-1">
-                  Solve deterministic practice challenges across Easy, Medium, and Hard tiers.
-                </p>
-              </div>
-            </Link>
+                  <Link
+                    href="/learn"
+                    className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-primary hover:bg-primary/90 text-white text-xs font-bold transition-all shadow-md shrink-0 self-start sm:self-auto"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Launch Practical Lab</span>
+                  </Link>
+                </div>
+              )}
 
-            <Link
-              href="/modeler"
-              className="bg-surface rounded-xl p-4 border border-border hover:border-tertiary/50 hover:shadow-soft transition-all group flex flex-col justify-between"
-            >
-              <div className="w-10 h-10 rounded-full bg-tertiary-container/20 text-tertiary flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Boxes className="w-5 h-5" />
+              {/* Enrolled Academic Cohorts Section */}
+              <div className="bg-surface-low rounded-2xl border border-border p-5 flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <GraduationCap className="w-5 h-5 text-primary" />
+                    <h2 className="text-base font-bold text-text-main">My University Cohorts</h2>
+                  </div>
+                  <button
+                    onClick={() => setJoinModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary text-white text-xs font-bold hover:bg-primary/90 transition-all shadow-sm"
+                  >
+                    <KeyRound className="w-3.5 h-3.5" />
+                    <span>Join Class with Code</span>
+                  </button>
+                </div>
+
+                {classrooms.enrolled.length === 0 ? (
+                  <div className="p-6 rounded-xl border border-dashed border-border text-center flex flex-col items-center gap-2">
+                    <Users className="w-6 h-6 text-text-muted" />
+                    <p className="text-xs text-text-muted">You are not enrolled in any academic cohorts yet.</p>
+                    <button
+                      onClick={() => setJoinModalOpen(true)}
+                      className="text-xs font-bold text-primary hover:underline mt-1"
+                    >
+                      Enter a 6-character code (e.g. CS-101) to join
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {classrooms.enrolled.map((cls) => (
+                      <div
+                        key={cls.id}
+                        className="p-4 rounded-xl bg-surface border border-border flex flex-col justify-between gap-3"
+                      >
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                              {cls.code}
+                            </span>
+                            <span className="text-[11px] text-text-muted">Instructor: {cls.facultyName}</span>
+                          </div>
+                          <h4 className="text-sm font-bold text-text-main mt-2">{cls.name}</h4>
+                          <p className="text-xs text-text-muted mt-1 line-clamp-2">{cls.description}</p>
+                        </div>
+                        <div className="flex items-center justify-between pt-2 border-t border-border/60 text-xs">
+                          <span className="text-text-muted font-mono text-[11px]">
+                            {cls.enrolledStudentIds?.length || 0} peers enrolled
+                          </span>
+                          <Link
+                            href="/challenges"
+                            className="font-bold text-primary hover:underline flex items-center gap-1 text-[11px]"
+                          >
+                            <span>View Assignments</span>
+                            <ArrowRight className="w-3 h-3" />
+                          </Link>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div className="mt-4">
-                <h4 className="text-sm font-bold text-text-main group-hover:text-tertiary transition-colors">
-                  ER / Data Modeler
-                </h4>
-                <p className="text-xs text-text-muted mt-1">
-                  Visual canvas to design MongoDB models and push structure into workspace.
-                </p>
+
+              {/* Recent Practical Query History */}
+              <div className="bg-surface-low rounded-2xl border border-border p-5 flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <Terminal className="w-5 h-5 text-secondary" />
+                    <h2 className="text-base font-bold text-text-main">Recent Practical Query Log</h2>
+                  </div>
+                  <Link href="/playground" className="text-xs font-bold text-primary hover:underline">
+                    Open Playground
+                  </Link>
+                </div>
+
+                {recentQueries.length === 0 ? (
+                  <div className="p-6 rounded-xl border border-dashed border-border text-center text-xs text-text-muted">
+                    No queries executed yet. Run your first practical in the Learn mode!
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {recentQueries.map((q) => (
+                      <div
+                        key={q.id}
+                        className="p-3 rounded-xl bg-surface border border-border flex items-center justify-between gap-4 text-xs font-mono"
+                      >
+                        <div className="flex items-center gap-3 overflow-hidden">
+                          <span className="px-2 py-0.5 rounded bg-primary-fixed text-primary font-bold text-[10px] uppercase">
+                            {q.operation || 'find'}
+                          </span>
+                          <span className="text-text-main truncate text-xs">{q.rawQuery}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-text-muted shrink-0 text-[11px]">
+                          <span>{q.durationMs || q.executionTimeMs || 8}ms</span>
+                          <span>&bull;</span>
+                          <span className="text-tertiary">✓ Success</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </Link>
+            </div>
+
+            {/* Right Column (Span 4) */}
+            <div className="xl:col-span-4 flex flex-col gap-6">
+              {/* Virtual Sandboxes */}
+              <div className="bg-surface-low rounded-2xl border border-border p-5 flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Database className="w-4 h-4 text-primary" />
+                    <h3 className="text-sm font-bold text-text-main">Virtual Sandboxes</h3>
+                  </div>
+                  <Link href="/workspace" className="text-xs font-bold text-primary hover:underline">
+                    Manage
+                  </Link>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  {databases.map((dbItem) => (
+                    <div
+                      key={dbItem.id}
+                      className="p-3 rounded-xl bg-surface border border-border flex items-center justify-between"
+                    >
+                      <div>
+                        <h4 className="text-xs font-bold text-text-main font-mono">{dbItem.name}</h4>
+                        <span className="text-[10px] text-text-muted font-mono">
+                          {dbItem.collectionsCount || 1} collections &bull; {dbItem.totalDocumentsCount || 5} docs
+                        </span>
+                      </div>
+                      <Link
+                        href="/playground"
+                        className="px-2.5 py-1 rounded-md bg-surface-high hover:bg-surface border border-border text-[11px] font-bold text-text-main"
+                      >
+                        Query
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Quick Links Card */}
+              <div className="bg-surface-low rounded-2xl border border-border p-5 flex flex-col gap-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-text-muted">
+                  Quick Access Modules
+                </h3>
+                <div className="grid grid-cols-2 gap-2 text-xs font-bold">
+                  <Link
+                    href="/modeler"
+                    className="p-3 rounded-xl bg-surface border border-border hover:border-primary/50 text-text-main flex items-center gap-2"
+                  >
+                    <Boxes className="w-4 h-4 text-secondary" />
+                    <span>Data Modeler</span>
+                  </Link>
+                  <Link
+                    href="/forum"
+                    className="p-3 rounded-xl bg-surface border border-border hover:border-primary/50 text-text-main flex items-center gap-2"
+                  >
+                    <Users className="w-4 h-4 text-tertiary" />
+                    <span>Lab Forum</span>
+                  </Link>
+                  <Link
+                    href="/challenges"
+                    className="p-3 rounded-xl bg-surface border border-border hover:border-primary/50 text-text-main flex items-center gap-2"
+                  >
+                    <Trophy className="w-4 h-4 text-primary" />
+                    <span>Challenges</span>
+                  </Link>
+                  <Link
+                    href="/workspace"
+                    className="p-3 rounded-xl bg-surface border border-border hover:border-primary/50 text-text-main flex items-center gap-2"
+                  >
+                    <Folder className="w-4 h-4 text-orange-400" />
+                    <span>Documents</span>
+                  </Link>
+                </div>
+              </div>
+            </div>
           </div>
+        </div>
+      )}
 
-          {/* Recent Query History Card */}
-          <div className="bg-surface rounded-2xl p-5 border border-border shadow-sm flex flex-col">
-            <div className="flex items-center justify-between pb-3 border-b border-border">
+      {/* ------------------------------------------------------------------------- */}
+      {/* VIEW B: FACULTY INSTRUCTOR PORTAL                                         */}
+      {/* ------------------------------------------------------------------------- */}
+      {currentView === 'faculty' && (
+        <div className="flex flex-col gap-6">
+          {/* Faculty Header Banner */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border">
+            <div>
               <div className="flex items-center gap-2">
-                <Terminal className="w-4 h-4 text-primary" />
-                <h3 className="text-sm font-bold text-text-main">Recent Laboratory Queries</h3>
+                <span className="text-xs font-mono font-bold text-secondary tracking-widest uppercase">
+                  Faculty Academic Management Console
+                </span>
+                <span className="text-text-muted text-xs">&bull;</span>
+                <span className="text-xs text-text-muted font-medium">Department of Database Engineering</span>
               </div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-text-main mt-0.5">
+                Instructor Console &bull; {profile?.displayName || 'Professor'}
+              </h1>
+              <p className="text-xs sm:text-sm text-text-muted mt-1">
+                Oversee academic cohorts, dispatch MongoDB curriculum practicals, and monitor student execution progress.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCreateModalOpen(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-secondary text-white text-xs font-bold hover:bg-secondary/90 transition-all shadow-sm"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Create New Cohort</span>
+              </button>
               <Link
                 href="/playground"
-                className="text-xs font-semibold text-primary hover:underline"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-surface-high hover:bg-surface-low text-text-main text-xs font-bold transition-all border border-border"
               >
-                Open Playground &rarr;
+                <Terminal className="w-4 h-4" />
+                <span>Test Query</span>
+              </Link>
+            </div>
+          </div>
+
+          {/* Feedback banner */}
+          {dispatchMsg && (
+            <div className="p-3.5 rounded-xl bg-tertiary/15 border border-tertiary/30 text-tertiary text-xs font-bold flex items-center gap-2 animate-fadeIn">
+              <CheckCheck className="w-4 h-4" />
+              <span>{dispatchMsg}</span>
+            </div>
+          )}
+
+          {/* Faculty KPIs */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-surface-low rounded-2xl p-4 border border-border/70 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Teaching Cohorts</span>
+                <GraduationCap className="w-4 h-4 text-secondary" />
+              </div>
+              <div className="mt-3">
+                <span className="text-2xl font-black text-text-main font-mono">
+                  {classrooms.teaching.length}
+                </span>
+                <p className="text-[11px] text-text-muted mt-1">Active lab sections</p>
+              </div>
+            </div>
+
+            <div className="bg-surface-low rounded-2xl p-4 border border-border/70 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Total Students</span>
+                <Users className="w-4 h-4 text-primary" />
+              </div>
+              <div className="mt-3">
+                <span className="text-2xl font-black text-text-main font-mono">
+                  {classrooms.teaching.reduce((acc, c) => acc + (c.enrolledStudentIds?.length || 0), 0) +
+                    (adminStats?.roles?.students || 2)}
+                </span>
+                <p className="text-[11px] text-text-muted mt-1">Enrolled across cohorts</p>
+              </div>
+            </div>
+
+            <div className="bg-surface-low rounded-2xl p-4 border border-border/70 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Syllabus Practicals</span>
+                <BookOpen className="w-4 h-4 text-tertiary" />
+              </div>
+              <div className="mt-3">
+                <span className="text-2xl font-black text-text-main font-mono">15</span>
+                <p className="text-[11px] text-text-muted mt-1">Curated MongoDB labs</p>
+              </div>
+            </div>
+
+            <div className="bg-surface-low rounded-2xl p-4 border border-border/70 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Submissions Recorded</span>
+                <TrendingUp className="w-4 h-4 text-orange-400" />
+              </div>
+              <div className="mt-3">
+                <span className="text-2xl font-black text-text-main font-mono">
+                  {adminStats?.overview?.totalQueries || 14}
+                </span>
+                <p className="text-[11px] text-text-muted mt-1">Telemetry AST executions</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Faculty Main Section: Cohort Management */}
+          <div className="bg-surface-low rounded-2xl border border-border p-5 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-text-main">Teaching Cohorts &amp; Lab Sections</h2>
+                <p className="text-xs text-text-muted">
+                  Share invite codes with your students so they can enroll into your virtual database laboratory.
+                </p>
+              </div>
+              <button
+                onClick={() => setCreateModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-secondary text-white text-xs font-bold hover:bg-secondary/90 transition-all shadow-sm"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Create Section</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {classrooms.teaching.map((cls) => (
+                <div
+                  key={cls.id}
+                  className="p-5 rounded-2xl bg-surface border border-border flex flex-col justify-between gap-4 shadow-sm"
+                >
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-md bg-secondary/15 text-secondary border border-secondary/30">
+                        {cls.code}
+                      </span>
+                      <button
+                        onClick={() => handleCopyCode(cls.code)}
+                        className="inline-flex items-center gap-1 text-[11px] font-mono text-text-muted hover:text-text-main px-2 py-0.5 rounded bg-surface-high border border-border"
+                      >
+                        {copiedCode === cls.code ? (
+                          <>
+                            <Check className="w-3 h-3 text-tertiary" />
+                            <span className="text-tertiary font-bold">Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span>Copy Code</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <h3 className="text-base font-bold text-text-main mt-3">{cls.name}</h3>
+                    <p className="text-xs text-text-muted mt-1 leading-relaxed">{cls.description}</p>
+                  </div>
+
+                  <div className="pt-3 border-t border-border flex items-center justify-between text-xs">
+                    <span className="text-text-muted font-mono font-bold">
+                      {cls.enrolledStudentIds?.length || 0} Students Enrolled
+                    </span>
+                    <button
+                      onClick={() => handleOpenRoster(cls)}
+                      className="px-3 py-1 rounded-lg bg-surface-high hover:bg-surface-low text-text-main font-bold text-xs border border-border flex items-center gap-1"
+                    >
+                      <UserCheck className="w-3.5 h-3.5" />
+                      <span>View Roster</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Curriculum Practical Assignment Matrix */}
+          <div className="bg-surface-low rounded-2xl border border-border p-5 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-text-main">Curriculum Practical Assignment Matrix</h2>
+                <p className="text-xs text-text-muted">
+                  Dispatch standardized MongoDB practicals to student laboratory cohorts with deterministic grading.
+                </p>
+              </div>
+              <Link
+                href="/learn"
+                className="text-xs font-bold text-secondary hover:underline flex items-center gap-1"
+              >
+                <span>Preview All 15 Practicals</span>
+                <ExternalLink className="w-3.5 h-3.5" />
               </Link>
             </div>
 
-            {recentQueries.length === 0 ? (
-              <div className="py-8 text-center flex flex-col items-center gap-2">
-                <Clock className="w-8 h-8 text-text-muted/40" />
-                <span className="text-xs font-medium text-text-muted">
-                  No queries executed yet. Open Mongo Playground to run your first MQL query!
-                </span>
-                <Link
-                  href="/playground"
-                  className="mt-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-bold hover:bg-primary/20 transition-colors"
-                >
-                  Go to Playground
-                </Link>
-              </div>
-            ) : (
-              <div className="flex flex-col divide-y divide-border/60">
-                {recentQueries.map((q) => (
-                  <div key={q.id} className="py-3 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 overflow-hidden">
-                      <div
-                        className={`w-2 h-2 rounded-full shrink-0 ${
-                          q.success ? 'bg-tertiary' : 'bg-error'
-                        }`}
-                      ></div>
-                      <code className="text-xs font-mono text-text-main truncate max-w-[280px] sm:max-w-[420px]">
-                        {q.rawQuery}
-                      </code>
-                    </div>
-                    <div className="flex items-center gap-3 shrink-0 text-xs font-mono text-text-muted">
-                      <span>{q.durationMs}ms</span>
-                      <span className="hidden sm:inline bg-surface-high px-2 py-0.5 rounded-full">
-                        {q.documentsReturned} docs
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-border text-text-muted font-mono uppercase text-[10px]">
+                    <th className="py-2.5 px-3">#</th>
+                    <th className="py-2.5 px-3">Practical Title</th>
+                    <th className="py-2.5 px-3">Category</th>
+                    <th className="py-2.5 px-3">XP Reward</th>
+                    <th className="py-2.5 px-3">Status</th>
+                    <th className="py-2.5 px-3 text-right">Faculty Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {lessons.slice(0, 6).map((lesson, idx) => {
+                    const isAssigned = !!assignedPracticals[lesson.id];
+                    return (
+                      <tr key={lesson.id} className="hover:bg-surface/50">
+                        <td className="py-3 px-3 font-mono text-text-muted">{idx + 1}</td>
+                        <td className="py-3 px-3 font-bold text-text-main">{lesson.title}</td>
+                        <td className="py-3 px-3 font-mono text-[11px] text-text-muted">
+                          {lesson.category}
+                        </td>
+                        <td className="py-3 px-3 font-mono font-bold text-secondary">
+                          +{lesson.xpReward} XP
+                        </td>
+                        <td className="py-3 px-3">
+                          {isAssigned ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-tertiary/15 text-tertiary border border-tertiary/30">
+                              <Check className="w-3 h-3" />
+                              <span>Active in Syllabus</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-surface-high text-text-muted border border-border">
+                              <span>Optional</span>
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <button
+                            onClick={() => handleDispatchPractical(lesson.id, lesson.title)}
+                            disabled={isAssigned}
+                            className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                              isAssigned
+                                ? 'opacity-50 cursor-not-allowed text-text-muted bg-surface-high'
+                                : 'bg-secondary hover:bg-secondary/90 text-white shadow-sm'
+                            }`}
+                          >
+                            {isAssigned ? 'Assigned' : 'Dispatch to Cohort'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* ------------------------------------------------------------------------- */}
+      {/* VIEW C: PLATFORM ADMIN CONTROL CENTER                                     */}
+      {/* ------------------------------------------------------------------------- */}
+      {currentView === 'admin' && (
+        <div className="flex flex-col gap-6">
+          {/* Admin Header Banner */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono font-bold text-error tracking-widest uppercase">
+                  Platform Control Center &bull; Infrastructure Telemetry
+                </span>
+                <span className="text-text-muted text-xs">&bull;</span>
+                <span className="text-xs text-text-muted font-medium">Cluster: Localhost (WiredTiger 8.2)</span>
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-text-main mt-0.5">
+                System Administration &amp; Telemetry Portal
+              </h1>
+              <p className="text-xs sm:text-sm text-text-muted mt-1">
+                Monitor multi-tenant database namespaces, manage user role escalation, and execute garbage collection.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleCleanOrphans}
+                disabled={cleaningOrphans}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-error text-white text-xs font-bold hover:bg-error/90 transition-all shadow-sm disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{cleaningOrphans ? 'Cleaning...' : 'Purge Orphan DBs'}</span>
+              </button>
+              <Link
+                href="/admin"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-surface-high hover:bg-surface-low text-text-main text-xs font-bold transition-all border border-border"
+              >
+                <Activity className="w-4 h-4" />
+                <span>Full Telemetry Page</span>
+              </Link>
+            </div>
+          </div>
+
+          {/* Feedback banner */}
+          {cleanMsg && (
+            <div className="p-3.5 rounded-xl bg-surface border border-error/30 text-error text-xs font-bold flex items-center gap-2 animate-fadeIn">
+              <Check className="w-4 h-4" />
+              <span>{cleanMsg}</span>
+            </div>
+          )}
+
+          {/* Admin KPIs */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-surface-low rounded-2xl p-4 border border-border/70 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Total Users</span>
+                <Users className="w-4 h-4 text-primary" />
+              </div>
+              <div className="mt-3">
+                <span className="text-2xl font-black text-text-main font-mono">
+                  {adminStats?.overview?.totalUsers || adminUsers.length || 11}
+                </span>
+                <p className="text-[11px] text-text-muted mt-1">Platform user accounts</p>
+              </div>
+            </div>
+
+            <div className="bg-surface-low rounded-2xl p-4 border border-border/70 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Active Virtual DBs</span>
+                <Database className="w-4 h-4 text-secondary" />
+              </div>
+              <div className="mt-3">
+                <span className="text-2xl font-black text-text-main font-mono">
+                  {adminStats?.overview?.totalDatabases || databases.length || 9}
+                </span>
+                <p className="text-[11px] text-text-muted mt-1">Isolated namespaces</p>
+              </div>
+            </div>
+
+            <div className="bg-surface-low rounded-2xl p-4 border border-border/70 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Total Queries</span>
+                <Activity className="w-4 h-4 text-tertiary" />
+              </div>
+              <div className="mt-3">
+                <span className="text-2xl font-black text-text-main font-mono">
+                  {adminStats?.overview?.totalQueries || 14}
+                </span>
+                <p className="text-[11px] text-text-muted mt-1">Global AST executions</p>
+              </div>
+            </div>
+
+            <div className="bg-surface-low rounded-2xl p-4 border border-border/70 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Engine Status</span>
+                <Shield className="w-4 h-4 text-tertiary" />
+              </div>
+              <div className="mt-3">
+                <span className="text-2xl font-black text-tertiary font-mono">HEALTHY</span>
+                <p className="text-[11px] text-text-muted mt-1">MongoDB 8.2 WiredTiger</p>
+              </div>
+            </div>
+          </div>
+
+          {/* User Directory & Role Escalator Table */}
+          <div className="bg-surface-low rounded-2xl border border-border p-5 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-text-main">User Directory &amp; Role Management</h2>
+                <p className="text-xs text-text-muted">
+                  Instantly promote or reassign student, faculty, and administrative privileges across the platform.
+                </p>
+              </div>
+              <span className="text-xs font-mono font-bold text-text-muted">
+                {adminUsers.length} Registered Accounts
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-border text-text-muted font-mono uppercase text-[10px]">
+                    <th className="py-2.5 px-3">User</th>
+                    <th className="py-2.5 px-3">Email</th>
+                    <th className="py-2.5 px-3">Current Role</th>
+                    <th className="py-2.5 px-3">Active Database</th>
+                    <th className="py-2.5 px-3 text-right">Escalate Role</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {adminUsers.slice(0, 8).map((u) => (
+                    <tr key={u.id} className="hover:bg-surface/50">
+                      <td className="py-3 px-3">
+                        <div className="font-bold text-text-main">{u.displayName || u.username}</div>
+                        <div className="text-[10px] font-mono text-text-muted">{u.id}</div>
+                      </td>
+                      <td className="py-3 px-3 font-mono text-text-muted">{u.email}</td>
+                      <td className="py-3 px-3">
+                        <span
+                          className={`text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-full border ${
+                            u.role === 'faculty'
+                              ? 'bg-secondary/15 text-secondary border-secondary/30'
+                              : u.role === 'admin'
+                              ? 'bg-error/15 text-error border-error/30'
+                              : 'bg-primary/15 text-primary border-primary/30'
+                          }`}
+                        >
+                          {u.role || 'student'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 font-mono text-[11px] text-text-muted">
+                        {u.activeDatabaseId ? (
+                          <span className="text-tertiary">Connected</span>
+                        ) : (
+                          <span className="text-text-muted">Auto-Provision</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <div className="inline-flex items-center gap-1.5">
+                          <button
+                            onClick={() => handleUpdateRole(u.id, 'student')}
+                            disabled={roleUpdatingUser === u.id || u.role === 'student'}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all ${
+                              u.role === 'student'
+                                ? 'bg-primary/20 text-primary border-primary/40 opacity-50'
+                                : 'bg-surface hover:bg-surface-high border-border text-text-muted'
+                            }`}
+                          >
+                            Student
+                          </button>
+                          <button
+                            onClick={() => handleUpdateRole(u.id, 'faculty')}
+                            disabled={roleUpdatingUser === u.id || u.role === 'faculty'}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all ${
+                              u.role === 'faculty'
+                                ? 'bg-secondary/20 text-secondary border-secondary/40 opacity-50'
+                                : 'bg-surface hover:bg-surface-high border-border text-text-muted'
+                            }`}
+                          >
+                            Faculty
+                          </button>
+                          <button
+                            onClick={() => handleUpdateRole(u.id, 'admin')}
+                            disabled={roleUpdatingUser === u.id || u.role === 'admin'}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all ${
+                              u.role === 'admin'
+                                ? 'bg-error/20 text-error border-error/40 opacity-50'
+                                : 'bg-surface hover:bg-surface-high border-border text-text-muted'
+                            }`}
+                          >
+                            Admin
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 1: JOIN CLASSROOM COHORT                                            */}
+      {/* ========================================================================= */}
+      {joinModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-md bg-surface-elevated rounded-3xl border border-border p-6 shadow-2xl flex flex-col gap-4">
+            <div className="flex items-center justify-between pb-2 border-b border-border">
+              <div className="flex items-center gap-2 text-primary font-bold">
+                <GraduationCap className="w-5 h-5" />
+                <span className="text-sm">Join Academic Cohort</span>
+              </div>
+              <button
+                onClick={() => setJoinModalOpen(false)}
+                className="w-7 h-7 rounded-full flex items-center justify-center text-text-muted hover:text-text-main hover:bg-surface"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-text-muted">
+              Enter the 6-character cohort code provided by your instructor (e.g.{' '}
+              <strong className="text-primary font-mono">CS-101</strong>) to access assigned practicals.
+            </p>
+
+            {cohortMsg && (
+              <div
+                className={`p-3 rounded-xl text-xs font-medium border ${
+                  cohortMsg.type === 'success'
+                    ? 'bg-tertiary/15 border-tertiary text-tertiary'
+                    : 'bg-error/15 border-error text-error'
+                }`}
+              >
+                {cohortMsg.text}
+              </div>
+            )}
+
+            <form onSubmit={handleJoinClassroom} className="flex flex-col gap-3">
+              <input
+                type="text"
+                placeholder="e.g. CS-101"
+                maxLength={10}
+                value={joinCodeInput}
+                onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
+                className="w-full p-3 font-mono text-center text-lg tracking-widest rounded-xl bg-surface border border-border text-text-main focus:outline-none focus:ring-2 focus:ring-primary uppercase"
+              />
+              <button
+                type="submit"
+                disabled={submittingCohort || !joinCodeInput.trim()}
+                className="w-full py-2.5 rounded-full bg-primary hover:bg-primary/90 text-white text-xs font-bold transition-all shadow-md disabled:opacity-50"
+              >
+                {submittingCohort ? 'Verifying Code...' : 'Enroll in Cohort'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 2: CREATE ACADEMIC COHORT                                           */}
+      {/* ========================================================================= */}
+      {createModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-md bg-surface-elevated rounded-3xl border border-border p-6 shadow-2xl flex flex-col gap-4">
+            <div className="flex items-center justify-between pb-2 border-b border-border">
+              <div className="flex items-center gap-2 text-secondary font-bold">
+                <Plus className="w-5 h-5" />
+                <span className="text-sm">Create New Academic Cohort</span>
+              </div>
+              <button
+                onClick={() => setCreateModalOpen(false)}
+                className="w-7 h-7 rounded-full flex items-center justify-center text-text-muted hover:text-text-main hover:bg-surface"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {cohortMsg && (
+              <div
+                className={`p-3 rounded-xl text-xs font-medium border ${
+                  cohortMsg.type === 'success'
+                    ? 'bg-tertiary/15 border-tertiary text-tertiary'
+                    : 'bg-error/15 border-error text-error'
+                }`}
+              >
+                {cohortMsg.text}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateClassroom} className="flex flex-col gap-3">
+              <div>
+                <label className="text-[11px] font-bold text-text-muted uppercase">Course / Cohort Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. CS-301: Advanced Database Design"
+                  value={newClassName}
+                  onChange={(e) => setNewClassName(e.target.value)}
+                  className="w-full p-2.5 mt-1 text-xs rounded-xl bg-surface border border-border text-text-main focus:outline-none focus:ring-2 focus:ring-secondary"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-text-muted uppercase">
+                  Custom Invite Code (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. DATA-301"
+                  maxLength={10}
+                  value={newClassCode}
+                  onChange={(e) => setNewClassCode(e.target.value.toUpperCase())}
+                  className="w-full p-2.5 mt-1 font-mono text-xs rounded-xl bg-surface border border-border text-text-main focus:outline-none focus:ring-2 focus:ring-secondary uppercase"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-text-muted uppercase">Syllabus Description</label>
+                <textarea
+                  rows={3}
+                  placeholder="Describe the cohort scope, syllabus requirements, and lab assignments..."
+                  value={newClassDesc}
+                  onChange={(e) => setNewClassDesc(e.target.value)}
+                  className="w-full p-2.5 mt-1 text-xs rounded-xl bg-surface border border-border text-text-main focus:outline-none focus:ring-2 focus:ring-secondary"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={submittingCohort || !newClassName.trim()}
+                className="w-full py-2.5 mt-2 rounded-full bg-secondary hover:bg-secondary/90 text-white text-xs font-bold transition-all shadow-md disabled:opacity-50"
+              >
+                {submittingCohort ? 'Provisioning Cohort...' : 'Create Academic Cohort'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 3: VIEW CLASSROOM ROSTER                                            */}
+      {/* ========================================================================= */}
+      {rosterModalOpen && activeCohortForRoster && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-2xl bg-surface-elevated rounded-3xl border border-border p-6 shadow-2xl flex flex-col gap-4 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-border">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-secondary/15 text-secondary border border-secondary/30">
+                    {activeCohortForRoster.code}
+                  </span>
+                  <h3 className="text-base font-bold text-text-main">{activeCohortForRoster.name}</h3>
+                </div>
+                <p className="text-xs text-text-muted mt-1">
+                  Enrolled student roster &bull; Real-time challenge completion tracking
+                </p>
+              </div>
+              <button
+                onClick={() => setRosterModalOpen(false)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-text-muted hover:text-text-main hover:bg-surface"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {loadingRoster ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-2">
+                <div className="w-6 h-6 border-2 border-secondary border-t-transparent rounded-full animate-spin"></div>
+                <span className="text-xs text-text-muted">Loading enrolled students...</span>
+              </div>
+            ) : cohortRoster.length === 0 ? (
+              <div className="py-10 text-center text-xs text-text-muted border border-dashed border-border rounded-xl">
+                No students enrolled in this section yet. Share invite code{' '}
+                <strong className="text-secondary font-mono">{activeCohortForRoster.code}</strong>.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-border text-text-muted font-mono uppercase text-[10px]">
+                      <th className="py-2 px-3">Student</th>
+                      <th className="py-2 px-3">Email</th>
+                      <th className="py-2 px-3">Level / XP</th>
+                      <th className="py-2 px-3">Challenges Solved</th>
+                      <th className="py-2 px-3 text-right">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {cohortRoster.map((s) => (
+                      <tr key={s.id} className="hover:bg-surface/50">
+                        <td className="py-2.5 px-3 font-bold text-text-main">{s.displayName}</td>
+                        <td className="py-2.5 px-3 font-mono text-text-muted text-[11px]">{s.email}</td>
+                        <td className="py-2.5 px-3 font-mono">
+                          Lvl {s.level} &bull; <span className="text-secondary font-bold">{s.xp} XP</span>
+                        </td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-tertiary">
+                          {s.solvedCount || 0} Solved
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          <span className="px-2 py-0.5 rounded-full bg-tertiary/15 text-tertiary font-mono text-[10px] font-bold">
+                            Enrolled
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="pt-2 border-t border-border flex justify-end">
+              <button
+                onClick={() => setRosterModalOpen(false)}
+                className="px-4 py-2 rounded-full bg-surface-high hover:bg-surface-low text-text-main text-xs font-bold border border-border"
+              >
+                Close Roster
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

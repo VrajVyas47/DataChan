@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { getPlatformDb } from '../../database/mongoClient';
+import { getPlatformDb, getMongoClient } from '../../database/mongoClient';
 import { ApiResponse, Workspace } from '@datachan/shared-types';
 import { InvalidRequestError, ResourceNotFoundError, AuthorizationError } from '../../errors';
 
@@ -137,7 +137,7 @@ export async function deleteWorkspace(req: Request, res: Response, next: NextFun
       .find({ workspaceId: workspace.id })
       .toArray();
 
-    const client = getPlatformDb().client;
+    const client = getMongoClient();
     for (const vdb of virtualDbs) {
       try {
         await client.db(vdb.physicalNamespace).dropDatabase();

@@ -28,9 +28,10 @@ export function Navbar() {
         <a href="#team" className="hover:text-white transition-colors">
           Team
         </a>
-        <a href="#investors" className="hover:text-white transition-colors">
-          Partners
-        </a>
+        <Link href="/forum" className="hover:text-white transition-colors flex items-center gap-1.5 text-white/90">
+          <span>Forum</span>
+          <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-white/10 text-white/80">New</span>
+        </Link>
         <Link href="/playground" className="hover:text-white transition-colors">
           Playground
         </Link>

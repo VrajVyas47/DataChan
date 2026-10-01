@@ -14,132 +14,108 @@ import {
   DesignFeedbackItem,
   GeneratedMongoStructure,
   ThemeId,
+  ForumPost,
+  ForumReply,
+  CreateForumPostDto,
+  CreateForumReplyDto,
+  ForumStats,
+  ForumCategory,
+  Classroom,
 } from '@datachan/shared-types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
 
-export interface DevUserIdentity {
-  uid: string;
-  email: string;
-  name: string;
-  role?: string;
-}
-
 class ApiClient {
-  private token: string | null = null;
-  private devUser: DevUserIdentity | null = null;
+  private cachedUser: UserProfile | null = null;
+  private pendingUserPromise: Promise<UserProfile> | null = null;
 
   constructor() {
+    // Purge any legacy insecure token storage from previous implementations
     if (typeof window !== 'undefined') {
-      this.token = localStorage.getItem('datachan_token');
-      const savedUser = localStorage.getItem('datachan_dev_user');
-      if (savedUser) {
-        try {
-          this.devUser = JSON.parse(savedUser);
-        } catch {
-          this.devUser = null;
-        }
+      try {
+        localStorage.removeItem('datachan_token');
+        localStorage.removeItem('datachan_auth_token');
+        localStorage.removeItem('datachan_dev_user');
+        localStorage.removeItem('datachan_user_id');
+      } catch {
+        // Ignore storage access errors
       }
     }
   }
 
-  public isAuthenticated(): boolean {
-    if (typeof window === 'undefined') return false;
-    const token = this.token || localStorage.getItem('datachan_token');
-    const user = this.devUser || localStorage.getItem('datachan_dev_user');
-    return !!(token && user);
+  public getCachedUser(): UserProfile | null {
+    return this.cachedUser;
   }
 
-  public getToken(): string | null {
-    return this.token;
-  }
+  public async createSession(idToken: string, displayName?: string): Promise<{ user: any }> {
+    const res = await fetch(`${API_BASE}/auth/session`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      credentials: 'include',
+      body: JSON.stringify({ idToken, displayName }),
+    });
 
-  public setToken(token: string | null) {
-    this.token = token;
-    if (typeof window !== 'undefined') {
-      if (token) localStorage.setItem('datachan_token', token);
-      else localStorage.removeItem('datachan_token');
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      throw new Error(json.error?.message || 'Failed to establish laboratory session');
     }
+
+    this.cachedUser = json.data?.user || null;
+    return json.data;
   }
 
-  public setDevUser(uid: string, email: string, name: string, role?: string) {
-    this.devUser = { uid, email, name, role };
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('datachan_dev_user', JSON.stringify(this.devUser));
-    }
-  }
-
-  public getDevUser(): DevUserIdentity | null {
-    return this.devUser;
-  }
-
-
-  public logout() {
-    this.token = null;
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('datachan_token');
-      localStorage.removeItem('datachan_auth_token');
-      localStorage.removeItem('datachan_dev_user');
-      localStorage.removeItem('datachan_user_id');
-    }
-  }
-
-  public async login(email: string, password: string): Promise<any> {
+  public async logout(): Promise<void> {
     try {
-      const res = await fetch(`${API_BASE}/auth/login`, {
+      await fetch(`${API_BASE}/auth/logout`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        credentials: 'include',
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Invalid email or password');
-      }
-      if (data.token && data.user) {
-        this.setToken(data.token);
-        this.setDevUser(data.user.id, data.user.email, data.user.displayName || data.user.username);
-        return data;
-      }
-      throw new Error('Authentication failed');
-    } catch (err: any) {
-      // Client-side development verification fallback if API is not directly reachable
-      const devEmail = process.env.NEXT_PUBLIC_DEMO_USER_EMAIL || 'demo@data-chan.local';
-      const devPassword = process.env.NEXT_PUBLIC_DEMO_USER_PASSWORD || 'DataChan@2026!';
-      if (email.trim().toLowerCase() === devEmail.trim().toLowerCase()) {
-        if (password === devPassword) {
-          const uid = 'demo_user';
-          const name = 'Lead Architect (Demo)';
-          this.setToken(`token_${uid}`);
-          this.setDevUser(uid, email, name);
-          return { success: true, token: `token_${uid}`, user: { id: uid, email, displayName: name } };
-        } else {
-          throw new Error('Invalid email or password');
-        }
-      }
-      throw err;
+    } catch {
+      // Ignore network failures on logout
+    } finally {
+      this.cachedUser = null;
+      this.pendingUserPromise = null;
     }
   }
-
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
       ...((options.headers as Record<string, string>) || {}),
     };
-
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
-    } else if (this.devUser) {
-      // In dev mode, send dev headers
-      headers['x-dev-uid'] = this.devUser.uid;
-      headers['x-dev-email'] = this.devUser.email;
-      headers['x-dev-name'] = this.devUser.name;
-    }
 
     const res = await fetch(`${API_BASE}${endpoint}`, {
       ...options,
       headers,
+      credentials: 'include', // Always send and receive HttpOnly cookies
     });
+
+    // 1. Handle 401 Unauthorized (Expired or missing session)
+    if (res.status === 401) {
+      this.cachedUser = null;
+      this.pendingUserPromise = null;
+      if (typeof window !== 'undefined') {
+        const currentPath = window.location.pathname;
+        if (currentPath !== '/login' && currentPath !== '/' && !currentPath.startsWith('/forum')) {
+          window.dispatchEvent(new CustomEvent('datachan_unauthorized'));
+        }
+      }
+      throw new Error('Authentication required. Session may have expired.');
+    }
+
+    // 2. Handle 403 Forbidden (Insufficient role or permissions)
+    if (res.status === 403) {
+      const errJson = await res.json().catch(() => null);
+      throw new Error(errJson?.error?.message || 'Access restricted. Insufficient privileges.');
+    }
 
     const json: ApiResponse<T> = await res.json();
     if (!json.success) {
@@ -150,8 +126,28 @@ class ApiClient {
   }
 
   // --- Auth & User ---
-  async getMe(): Promise<UserProfile> {
-    return this.request<UserProfile>('/auth/me');
+  async getMe(forceRefresh: boolean = false): Promise<UserProfile> {
+    if (this.cachedUser && !forceRefresh) {
+      return this.cachedUser;
+    }
+
+    if (this.pendingUserPromise && !forceRefresh) {
+      return this.pendingUserPromise;
+    }
+
+    this.pendingUserPromise = this.request<UserProfile>('/auth/me')
+      .then((profile) => {
+        this.cachedUser = profile;
+        this.pendingUserPromise = null;
+        return profile;
+      })
+      .catch((err) => {
+        this.cachedUser = null;
+        this.pendingUserPromise = null;
+        throw err;
+      });
+
+    return this.pendingUserPromise;
   }
 
   async syncUser(updates: {
@@ -160,10 +156,14 @@ class ApiClient {
     activeWorkspaceId?: string;
     activeDatabaseId?: string;
   }): Promise<any> {
-    return this.request('/auth/sync', {
+    const updated = await this.request('/auth/sync', {
       method: 'POST',
       body: JSON.stringify(updates),
     });
+    if (this.cachedUser) {
+      this.cachedUser = { ...this.cachedUser, ...updates };
+    }
+    return updated;
   }
 
   // --- Workspaces ---
@@ -321,6 +321,17 @@ class ApiClient {
     return this.request(`/lessons/${id}/complete`, { method: 'POST' });
   }
 
+  async runPractical(
+    lessonId: string,
+    rawQuery: string,
+    databaseId?: string
+  ): Promise<any> {
+    return this.request('/lessons/run-practical', {
+      method: 'POST',
+      body: JSON.stringify({ lessonId, rawQuery, databaseId }),
+    });
+  }
+
   // --- Challenges ---
   async listChallenges(): Promise<Challenge[]> {
     return this.request<Challenge[]>('/challenges');
@@ -371,6 +382,96 @@ class ApiClient {
     return this.request<GeneratedMongoStructure>(`/data-models/${modelId}/generate`, {
       method: 'POST',
       body: JSON.stringify({ targetDatabaseId }),
+    });
+  }
+
+  // --- Forums ---
+  async getForumPosts(params?: { category?: string; tag?: string; search?: string; sort?: 'recent' | 'top' | 'unanswered' }): Promise<ForumPost[]> {
+    const queryParts: string[] = [];
+    if (params?.category) queryParts.push(`category=${encodeURIComponent(params.category)}`);
+    if (params?.tag) queryParts.push(`tag=${encodeURIComponent(params.tag)}`);
+    if (params?.search) queryParts.push(`search=${encodeURIComponent(params.search)}`);
+    if (params?.sort) queryParts.push(`sort=${encodeURIComponent(params.sort)}`);
+    const qs = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+    return this.request<ForumPost[]>(`/forum/posts${qs}`);
+  }
+
+  async getForumPost(id: string): Promise<ForumPost> {
+    return this.request<ForumPost>(`/forum/posts/${id}`);
+  }
+
+  async createForumPost(dto: CreateForumPostDto): Promise<ForumPost> {
+    return this.request<ForumPost>('/forum/posts', {
+      method: 'POST',
+      body: JSON.stringify(dto),
+    });
+  }
+
+  async upvoteForumPost(id: string): Promise<{ upvotes: number; userUpvoted: boolean }> {
+    return this.request<{ upvotes: number; userUpvoted: boolean }>(`/forum/posts/${id}/upvote`, {
+      method: 'POST',
+    });
+  }
+
+  async createForumReply(postId: string, dto: CreateForumReplyDto): Promise<ForumReply> {
+    return this.request<ForumReply>(`/forum/posts/${postId}/replies`, {
+      method: 'POST',
+      body: JSON.stringify(dto),
+    });
+  }
+
+  async upvoteForumReply(postId: string, replyId: string): Promise<{ upvotes: number; userUpvoted: boolean }> {
+    return this.request<{ upvotes: number; userUpvoted: boolean }>(`/forum/posts/${postId}/replies/${replyId}/upvote`, {
+      method: 'POST',
+    });
+  }
+
+  async getForumStats(): Promise<ForumStats> {
+    return this.request<ForumStats>('/forum/stats');
+  }
+
+  // --- Classrooms & Cohorts ---
+  async listMyClassrooms(): Promise<{ teaching: Classroom[]; enrolled: Classroom[] }> {
+    return this.request<{ teaching: Classroom[]; enrolled: Classroom[] }>('/classrooms/my');
+  }
+
+  async joinClassroom(code: string): Promise<Classroom> {
+    return this.request<Classroom>('/classrooms/join', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    });
+  }
+
+  async createClassroom(name: string, description?: string, customCode?: string): Promise<Classroom> {
+    return this.request<Classroom>('/classrooms', {
+      method: 'POST',
+      body: JSON.stringify({ name, description, customCode }),
+    });
+  }
+
+  async getClassroomRoster(classroomId: string): Promise<{ classroom: any; roster: any[] }> {
+    return this.request<{ classroom: any; roster: any[] }>(`/classrooms/${classroomId}/roster`);
+  }
+
+  // --- Admin Portal ---
+  async getAdminStats(): Promise<any> {
+    return this.request<any>('/admin/stats');
+  }
+
+  async listAdminUsers(): Promise<any[]> {
+    return this.request<any[]>('/admin/users');
+  }
+
+  async updateAdminUserRole(userId: string, role: string): Promise<any> {
+    return this.request<any>(`/admin/users/${userId}/role`, {
+      method: 'PATCH',
+      body: JSON.stringify({ role }),
+    });
+  }
+
+  async cleanOrphanedDatabases(): Promise<any> {
+    return this.request<any>('/admin/maintenance/clean-orphans', {
+      method: 'POST',
     });
   }
 }

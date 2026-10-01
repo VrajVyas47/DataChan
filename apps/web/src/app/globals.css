@@ -384,3 +384,84 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(120, 117, 133, 0.5);
 }
+
+/* ========================================================================= */
+/* React Flow Theming - High Contrast Toolbar, Controls & Minimap            */
+/* ========================================================================= */
+.react-flow__controls {
+  background: var(--color-surface) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: 12px !important;
+  overflow: hidden !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25) !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.react-flow__controls-button {
+  background: var(--color-surface) !important;
+  border: none !important;
+  border-bottom: 1px solid var(--color-border) !important;
+  color: var(--color-text) !important;
+  fill: var(--color-text) !important;
+  width: 32px !important;
+  height: 32px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+
+.react-flow__controls-button:last-child {
+  border-bottom: none !important;
+}
+
+.react-flow__controls-button svg {
+  fill: var(--color-text) !important;
+  color: var(--color-text) !important;
+  stroke: var(--color-text) !important;
+  max-width: 14px !important;
+  max-height: 14px !important;
+  transition: fill 0.15s ease, stroke 0.15s ease !important;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--color-surface-high) !important;
+  color: var(--color-primary) !important;
+  fill: var(--color-primary) !important;
+}
+
+.react-flow__controls-button:hover svg {
+  fill: var(--color-primary) !important;
+  stroke: var(--color-primary) !important;
+}
+
+.react-flow__controls-button:active {
+  background: var(--color-primary) !important;
+  color: #ffffff !important;
+  fill: #ffffff !important;
+}
+
+.react-flow__controls-button:active svg {
+  fill: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+.react-flow__minimap {
+  background: var(--color-surface) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2) !important;
+}
+
+.react-flow__minimap-mask {
+  fill: rgba(0, 0, 0, 0.35) !important;
+  stroke: var(--color-border) !important;
+  stroke-width: 1 !important;
+}
+
+.react-flow__minimap-node {
+  fill: var(--color-primary) !important;
+  stroke: none !important;
+}

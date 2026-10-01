@@ -50,10 +50,10 @@ export class SceneManager {
 
     // 4. Central Abstract 3D Database Physical Architecture
     const isMobile = window.innerWidth < 768;
-    this.databaseCore = createDatabaseCore(isMobile ? 2400 : 5200);
-    // Initial hero position: placed toward the RIGHT SIDE (x = 1.62 desktop) so headline stays completely unblocked
-    this.databaseCore.points.position.set(isMobile ? 0.0 : 1.62, isMobile ? 0.55 : 0.05, 0);
-    this.databaseCore.points.scale.setScalar(isMobile ? 0.72 : 0.84);
+    this.databaseCore = createDatabaseCore(isMobile ? 1100 : 1800);
+    // Initial hero position: placed in the RIGHT 55-85% ZONE (x = 1.75 desktop) so headline is completely unblocked
+    this.databaseCore.points.position.set(isMobile ? 0.0 : 1.75, isMobile ? 0.95 : 0.02, 0);
+    this.databaseCore.points.scale.setScalar(isMobile ? 0.50 : 0.70);
     this.scene.add(this.databaseCore.points);
 
     // 5. Ambient Floating Geometric Triangles & Wireframes
@@ -82,8 +82,9 @@ export class SceneManager {
       depthWrite: false,
     });
     this.coreGlow = new THREE.Sprite(glowMat);
-    this.coreGlow.scale.set(2.6, 2.6, 1);
-    this.coreGlow.position.set(isMobile ? 0.0 : 1.62, isMobile ? 0.55 : 0.05, 0);
+    this.coreGlow.scale.set(1.8, 1.8, 1);
+    this.coreGlow.position.set(isMobile ? 0.0 : 1.75, isMobile ? 0.95 : 0.02, 0);
+    this.coreGlow.material.opacity = 0.05;
     this.scene.add(this.coreGlow);
 
     // 7. Event Listeners
@@ -133,9 +134,9 @@ export class SceneManager {
     const count = orig.length;
     const isMobile = window.innerWidth < 768;
 
-    const heroX = isMobile ? 0.0 : 1.62;
-    const heroY = isMobile ? 0.55 : 0.05;
-    const heroScale = isMobile ? 0.72 : 0.84;
+    const heroX = isMobile ? 0.0 : 1.75;
+    const heroY = isMobile ? 0.95 : 0.02;
+    const heroScale = isMobile ? 0.50 : 0.70;
 
     if (stage === 0) {
       // Hero -> Manifesto / Architecture (Platters separate vertically and glide from right toward center/left)
@@ -211,27 +212,29 @@ export class SceneManager {
 
     const time = this.clock.getElapsedTime();
 
-    // Mouse interpolation (subtle, calm lerping: 0.025)
-    this.mouse.x += (this.mouse.targetX - this.mouse.x) * 0.025;
-    this.mouse.y += (this.mouse.targetY - this.mouse.y) * 0.025;
+    // Mouse interpolation: noticeable, responsive, damped lerping (0.05)
+    this.mouse.x += (this.mouse.targetX - this.mouse.x) * 0.05;
+    this.mouse.y += (this.mouse.targetY - this.mouse.y) * 0.05;
 
-    // Database core smooth cinematic rotation
+    // Database core smooth cinematic rotation and clear reactive tilt
     if (this.databaseCore.points) {
-      this.databaseCore.points.rotation.y = time * 0.07 + this.mouse.x * 0.12;
-      this.databaseCore.points.rotation.x = 0.14 + this.mouse.y * 0.08;
-      this.databaseCore.points.rotation.z = Math.sin(time * 0.12) * 0.02;
+      this.databaseCore.points.rotation.y = time * 0.08 + this.mouse.x * 0.38;
+      this.databaseCore.points.rotation.x = 0.16 - this.mouse.y * 0.28;
+      this.databaseCore.points.rotation.z = -this.mouse.x * 0.08;
 
       if (this.databaseCore.material.uniforms.uTime) {
         this.databaseCore.material.uniforms.uTime.value = time;
       }
     }
 
-    // Camera breathing parallax (calm, non-aggressive)
-    this.camera.position.x = this.mouse.x * 0.08;
-    this.camera.position.y = -this.mouse.y * 0.06;
+    // Camera breathing parallax (noticeable, convincing depth)
+    this.camera.position.x = this.mouse.x * 0.22;
+    this.camera.position.y = -this.mouse.y * 0.18;
     this.camera.lookAt(0, 0, 0);
 
-    // Floating wireframe geometric shapes
+    // Floating wireframe geometric shapes with counter-parallax
+    this.floatingShapes.group.position.x = -this.mouse.x * 0.25;
+    this.floatingShapes.group.position.y = this.mouse.y * 0.20;
     this.floatingShapes.update(time);
 
     this.renderer.render(this.scene, this.camera);

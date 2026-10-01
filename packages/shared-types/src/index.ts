@@ -29,19 +29,27 @@ export interface ApiResponse<T = any> {
 // ----------------------------------------------------------------------------
 // User & Auth
 // ----------------------------------------------------------------------------
+export type UserRole = 'student' | 'faculty' | 'admin';
+export type UserStatus = 'active' | 'suspended' | 'disabled';
+
 export interface User {
   id: string;
   firebaseUid: string;
   email: string;
   username: string;
+  role: UserRole;
+  status?: UserStatus;
+  emailVerified?: boolean;
   displayName?: string;
   photoUrl?: string;
   activeWorkspaceId?: string;
   activeDatabaseId?: string;
   activeCollectionName?: string;
   themePreference?: ThemeId;
+  enrolledClassroomIds?: string[];
   createdAt: string;
   updatedAt: string;
+  lastLoginAt?: string;
 }
 
 export interface UserProfile extends User {
@@ -105,15 +113,18 @@ export interface DatabaseStats {
 }
 
 // ----------------------------------------------------------------------------
-// Collections & Documents
+// Collections & Documents & Schema Advisor
 // ----------------------------------------------------------------------------
-export interface CollectionMetadata {
+export interface CollectionIndexInfo {
   name: string;
-  databaseId: string;
-  documentsCount: number;
-  avgDocumentSizeBytes?: number;
-  indexesCount?: number;
-  detectedFields?: DetectedFieldInfo[];
+  key: Record<string, number | string>;
+  unique?: boolean;
+}
+
+export interface SchemaRecommendation {
+  type: 'warning' | 'info' | 'optimization';
+  field?: string;
+  message: string;
 }
 
 export interface DetectedFieldInfo {
@@ -122,13 +133,45 @@ export interface DetectedFieldInfo {
   isArray: boolean;
   isObject: boolean;
   isObjectId: boolean;
+  isPolymorphic?: boolean;
+  isIndexed?: boolean;
   presencePercent: number; // 0 - 100
   exampleValue: any;
+}
+
+export interface CollectionMetadata {
+  name: string;
+  databaseId: string;
+  documentsCount: number;
+  avgDocumentSizeBytes?: number;
+  totalSizeBytes?: number;
+  indexesCount?: number;
+  indexes?: CollectionIndexInfo[];
+  detectedFields?: DetectedFieldInfo[];
+  recommendations?: SchemaRecommendation[];
 }
 
 export interface DocumentItem {
   _id: string;
   [key: string]: any;
+}
+
+// ----------------------------------------------------------------------------
+// Classrooms & Academic Cohorts
+// ----------------------------------------------------------------------------
+export interface Classroom {
+  id: string;
+  code: string;
+  name: string;
+  facultyId: string;
+  facultyName: string;
+  description?: string;
+  enrolledStudentIds: string[];
+  enrolledStudentsCount?: number;
+  assignedChallengeIds?: string[];
+  syllabusLessonIds?: string[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ----------------------------------------------------------------------------
@@ -192,7 +235,9 @@ export interface QueryHistoryItem {
   rawQuery: string;
   operation: SupportedMqlOperation;
   durationMs: number;
+  executionTimeMs?: number;
   documentsReturned: number;
+  documentsCount?: number;
   success: boolean;
   errorCode?: string;
   errorMessage?: string;
@@ -216,6 +261,7 @@ export interface Lesson {
   practiceCollection: string;
   practiceExplanation: string;
   practiceExpectedFilter?: Record<string, any>;
+  completed?: boolean;
 }
 
 export interface LessonProgress {
@@ -393,4 +439,83 @@ export interface ThemeOption {
   backgroundHex: string;
   surfaceHex: string;
 }
+
+// ----------------------------------------------------------------------------
+// Forum & Community Discussions
+// ----------------------------------------------------------------------------
+export type ForumCategory =
+  | 'general'
+  | 'queries'
+  | 'schema-design'
+  | 'aggregation'
+  | 'performance'
+  | 'challenges'
+  | 'announcements';
+
+export interface ForumReply {
+  id: string;
+  postId: string;
+  authorId: string;
+  authorName: string;
+  authorRole: string;
+  authorAvatar?: string;
+  content: string;
+  codeSnippet?: string;
+  codeLanguage?: string;
+  upvotes: number;
+  upvotedBy: string[];
+  isUpvoted?: boolean;
+  isAcceptedSolution?: boolean;
+  isAcceptedAnswer?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ForumPost {
+  id: string;
+  title: string;
+  content: string;
+  codeSnippet?: string;
+  codeLanguage?: string;
+  authorId: string;
+  authorName: string;
+  authorRole: string;
+  authorAvatar?: string;
+  category: ForumCategory;
+  tags: string[];
+  upvotes: number;
+  upvotedBy: string[];
+  replyCount: number;
+  views: number;
+  isPinned?: boolean;
+  isSolved?: boolean;
+  isUpvoted?: boolean;
+  replies?: ForumReply[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateForumPostDto {
+  title: string;
+  content: string;
+  category: ForumCategory;
+  tags: string[];
+  codeSnippet?: string;
+  codeLanguage?: string;
+}
+
+export interface CreateForumReplyDto {
+  content: string;
+  codeSnippet?: string;
+  codeLanguage?: string;
+}
+
+export interface ForumStats {
+  totalPosts: number;
+  totalReplies: number;
+  totalContributors: number;
+  solvedCount?: number;
+  topTags: { tag: string; count: number }[];
+}
+
 
