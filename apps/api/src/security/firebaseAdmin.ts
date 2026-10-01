@@ -17,13 +17,26 @@ export function initFirebaseAdmin(): admin.app.App {
     return admin.app();
   }
 
-  // Check if Firebase Auth emulator is running
+  // 1. Firebase Auth Emulator (FIREBASE_AUTH_EMULATOR_HOST)
   if (config.firebase.emulatorHost) {
     process.env.FIREBASE_AUTH_EMULATOR_HOST = config.firebase.emulatorHost;
-    logger.info(`Connecting Firebase Admin to Auth Emulator at ${config.firebase.emulatorHost}`);
+    const projectId = config.firebase.projectId || 'demo-datachan';
+    try {
+      const app = admin.initializeApp({
+        projectId,
+      });
+      initialized = true;
+      logger.info(
+        `Firebase Admin SDK initialized using Auth Emulator at ${config.firebase.emulatorHost} (projectId: ${projectId})`
+      );
+      return app;
+    } catch (err: any) {
+      logger.error('Failed to initialize Firebase Admin with Auth Emulator', err);
+      throw new Error(`Firebase Admin emulator initialization failed: ${err.message}`);
+    }
   }
 
-  // 1. Explicit Service Account credentials in environment
+  // 2. Explicit Service Account credentials in environment
   if (config.firebase.projectId && config.firebase.clientEmail && config.firebase.privateKey) {
     try {
       const app = admin.initializeApp({
@@ -43,22 +56,7 @@ export function initFirebaseAdmin(): admin.app.App {
     }
   }
 
-  // 2. Project ID only (used with Firebase Auth Emulator or Google Cloud environment)
-  if (config.firebase.projectId) {
-    try {
-      const app = admin.initializeApp({
-        projectId: config.firebase.projectId,
-      });
-      initialized = true;
-      logger.info(`Firebase Admin SDK initialized with projectId: ${config.firebase.projectId}`);
-      return app;
-    } catch (err: any) {
-      logger.error('Failed to initialize Firebase Admin with projectId', err);
-      throw new Error(`Firebase Admin initialization failed: ${err.message}`);
-    }
-  }
-
-  // 3. Fallback to GOOGLE_APPLICATION_CREDENTIALS if present
+  // 3. Application Default Credentials (GOOGLE_APPLICATION_CREDENTIALS)
   if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     try {
       const app = admin.initializeApp();
@@ -71,21 +69,19 @@ export function initFirebaseAdmin(): admin.app.App {
     }
   }
 
-  logger.warn(
-    'Firebase Admin credentials not found. Authentication requires FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY.'
-  );
-  throw new Error(
-    'Firebase Admin SDK is not configured. Please supply Firebase credentials in environment variables.'
-  );
+  // 4. Missing required credentials - Fail closed
+  const missingReason =
+    'Firebase Admin configuration missing. In development, configure FIREBASE_AUTH_EMULATOR_HOST (e.g. localhost:9099) and FIREBASE_PROJECT_ID, or provide service account credentials (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY). In production, service account credentials or GOOGLE_APPLICATION_CREDENTIALS are strictly required.';
+  logger.error(missingReason);
+  throw new Error(missingReason);
 }
 
 export function isFirebaseConfigured(): boolean {
   if (initialized && admin.apps.length > 0) return true;
-  return !!(
-    (config.firebase.projectId && config.firebase.clientEmail && config.firebase.privateKey) ||
-    config.firebase.emulatorHost ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS
-  );
+  if (config.firebase.emulatorHost) return true;
+  if (config.firebase.projectId && config.firebase.clientEmail && config.firebase.privateKey) return true;
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) return true;
+  return false;
 }
 
 export function getFirebaseAuth(): admin.auth.Auth {

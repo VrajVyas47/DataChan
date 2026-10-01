@@ -23,11 +23,13 @@ export const config = {
     emulatorHost: process.env.FIREBASE_AUTH_EMULATOR_HOST || '',
   },
   session: {
-    cookieName: 'datachan_session',
+    cookieName: process.env.SESSION_COOKIE_NAME || 'datachan_session',
     expirationDays: parseInt(process.env.SESSION_EXPIRATION_DAYS || '7', 10),
   },
   cors: {
-    allowedOrigins: process.env.ALLOWED_ORIGINS
+    allowedOrigins: process.env.CORS_ALLOWED_ORIGINS
+      ? process.env.CORS_ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+      : process.env.ALLOWED_ORIGINS
       ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
       : ['http://localhost:3000', 'http://127.0.0.1:3000'],
   },

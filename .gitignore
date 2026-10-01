@@ -19,6 +19,15 @@ yarn-error.log*
 .env.production.local
 **/.env
 **/.env.local
+**/.env.*
+!.env.example
+!**/.env.example
+
+# Service account & private keys
+*.pem
+*.key
+service-account*.json
+firebase-adminsdk*.json
 
 # Build info
 *.tsbuildinfo

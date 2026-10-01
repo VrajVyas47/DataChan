@@ -899,4 +899,70 @@ describe('Comprehensive Security Test Suite', () => {
       );
     });
   });
+
+  describe('6. Environment & Firebase Admin Initialization Security', () => {
+    it('enforces consistent 7-day session cookie expiration by default', () => {
+      expect(config.session.expirationDays).toBe(7);
+      expect(config.session.cookieName).toBe('datachan_session');
+    });
+
+    it('enforces single source of truth for MongoDB connectivity', () => {
+      expect(config.mongodb.uri).toBeDefined();
+      expect(config.mongodb.platformDb).toBe('datachan_platform');
+    });
+
+    it('detects missing Firebase Admin credentials and reports configuration state correctly', () => {
+      const originalEmulator = config.firebase.emulatorHost;
+      const originalEmail = config.firebase.clientEmail;
+      const originalKey = config.firebase.privateKey;
+
+      try {
+        config.firebase.emulatorHost = '';
+        config.firebase.clientEmail = '';
+        config.firebase.privateKey = '';
+
+        expect(firebaseAdminModule.isFirebaseConfigured()).toBe(false);
+      } finally {
+        config.firebase.emulatorHost = originalEmulator;
+        config.firebase.clientEmail = originalEmail;
+        config.firebase.privateKey = originalKey;
+      }
+    });
+
+    it('recognizes Firebase Auth Emulator when emulator host is provided', () => {
+      const originalEmulator = config.firebase.emulatorHost;
+      try {
+        config.firebase.emulatorHost = 'localhost:9099';
+        expect(firebaseAdminModule.isFirebaseConfigured()).toBe(true);
+      } finally {
+        config.firebase.emulatorHost = originalEmulator;
+      }
+    });
+
+    it('throws startup error when credentials and emulator host are missing', () => {
+      const originalEmulator = config.firebase.emulatorHost;
+      const originalEmail = config.firebase.clientEmail;
+      const originalKey = config.firebase.privateKey;
+      const originalGoogleAppCreds = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+
+      try {
+        config.firebase.emulatorHost = '';
+        config.firebase.clientEmail = '';
+        config.firebase.privateKey = '';
+        delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+
+        expect(() => firebaseAdminModule.initFirebaseAdmin()).toThrowError(
+          /Firebase Admin configuration missing/
+        );
+      } finally {
+        config.firebase.emulatorHost = originalEmulator;
+        config.firebase.clientEmail = originalEmail;
+        config.firebase.privateKey = originalKey;
+        if (originalGoogleAppCreds) {
+          process.env.GOOGLE_APPLICATION_CREDENTIALS = originalGoogleAppCreds;
+        }
+      }
+    });
+  });
 });
+

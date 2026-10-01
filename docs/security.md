@@ -26,9 +26,10 @@ Disallowed operators (e.g., `$where`, `$accumulator`, `$function`, administrativ
 ## 4. Authoritative Authentication Architecture
 - **Identity Provider**: Firebase Authentication is the sole identity authority. Data-Chan does not implement custom password hashing, bcrypt, or custom JWT generation.
 - **Session Exchange**: Clients authenticate via Firebase Auth, obtain a short-lived Firebase ID token, and post it to `POST /api/v1/auth/session`.
-- **Server Session Cookie**: The backend cryptographically verifies the ID token via Firebase Admin SDK, validates the user's account status (`active`, `suspended`, `disabled`), and issues a secure `HttpOnly`, `SameSite=Lax`, `Secure` (production) session cookie (`datachan_session`).
+- **Server Session Cookie**: The backend cryptographically verifies the ID token via Firebase Admin SDK, validates the user's account status (`active`, `suspended`, `disabled`), and issues a secure `HttpOnly`, `SameSite=Lax`, `Secure` (production) session cookie (`datachan_session`) with a consistent **7-day lifespan** (`SESSION_EXPIRATION_DAYS=7`).
 - **No LocalStorage Auth Tokens**: Auth tokens are never stored in browser `localStorage`.
 - **Fail Closed**: Missing, malformed, expired, or revoked sessions immediately return `401 Unauthorized`.
+- **Environment Isolation**: Server secrets (`FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`, `MONGODB_URI`) are strictly isolated server-side and never prefixed with `NEXT_PUBLIC_`. Development uses the Firebase Auth Emulator (`FIREBASE_AUTH_EMULATOR_HOST`) and unauthenticated local MongoDB. Production requires verified service account credentials.
 
 ## 5. Zero Client Trust & Purged Backdoors
 - All development bypasses (`x-dev-role`, `x-dev-uid`, `x-dev-email`, and fake bearer tokens like `token_<uid>`) have been completely purged from both backend and frontend.
