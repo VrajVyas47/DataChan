@@ -759,7 +759,7 @@ describe('Comprehensive Security Test Suite', () => {
   });
 
   describe('5. Admin Role Promotion & Self-Demotion Protection', () => {
-    it('blocks admin from demoting themselves', async () => {
+    it('blocks admin from modifying their own role', async () => {
       const req = {
         user: {
           userId: 'usr_admin1',
@@ -773,17 +773,24 @@ describe('Comprehensive Security Test Suite', () => {
       const res = { json: vi.fn() } as unknown as Response;
       const next = vi.fn();
 
+      mockUsersCollection.findOne.mockResolvedValue({
+        id: 'usr_admin1',
+        role: 'admin',
+        status: 'active',
+      });
+
       await adminController.updateUserRole(req, res, next);
 
       expect(next).toHaveBeenCalledTimes(1);
       const err = next.mock.calls[0][0];
-      expect(err.statusCode).toBe(400);
-      expect(err.message).toContain('cannot revoke their own admin privileges');
+      expect(err).toBeInstanceOf(AuthorizationError);
+      expect(err.statusCode).toBe(403);
+      expect(err.message).toContain('Administrators cannot modify their own role');
       expect(mockUsersCollection.findOneAndUpdate).not.toHaveBeenCalled();
       expect(mockAuth.setCustomUserClaims).not.toHaveBeenCalled();
     });
 
-    it('blocks demoting an administrator when they are the last active administrator', async () => {
+    it('blocks admin from modifying the role of another administrator', async () => {
       const req = {
         user: {
           userId: 'usr_admin1',
@@ -802,15 +809,14 @@ describe('Comprehensive Security Test Suite', () => {
         role: 'admin',
         status: 'active',
       });
-      // Exactly 1 active administrator remaining
-      mockUsersCollection.countDocuments.mockResolvedValue(1);
 
       await adminController.updateUserRole(req, res, next);
 
       expect(next).toHaveBeenCalledTimes(1);
       const err = next.mock.calls[0][0];
-      expect(err.statusCode).toBe(400);
-      expect(err.message).toContain('must maintain at least one active administrator');
+      expect(err).toBeInstanceOf(AuthorizationError);
+      expect(err.statusCode).toBe(403);
+      expect(err.message).toContain('Administrators cannot modify the role of another administrator');
       expect(mockUsersCollection.findOneAndUpdate).not.toHaveBeenCalled();
     });
 
@@ -845,7 +851,7 @@ describe('Comprehensive Security Test Suite', () => {
       expect(mockUsersCollection.findOneAndUpdate).not.toHaveBeenCalled();
     });
 
-    it('allows admin to promote another user and syncs Firebase custom claims, revokes refresh tokens & logs audit', async () => {
+    it('allows admin to promote another user and syncs Firebase custom claims without revoking refresh tokens & logs audit', async () => {
       const req = {
         user: {
           userId: 'usr_admin1',
@@ -887,7 +893,7 @@ describe('Comprehensive Security Test Suite', () => {
         { returnDocument: 'after' }
       );
       expect(mockAuth.setCustomUserClaims).toHaveBeenCalledWith('fb_target_student', { role: 'faculty' });
-      expect(mockAuth.revokeRefreshTokens).toHaveBeenCalledWith('fb_target_student');
+      expect(mockAuth.revokeRefreshTokens).not.toHaveBeenCalled();
       expect(auditModule.logSecurityEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'ROLE_UPDATED',
