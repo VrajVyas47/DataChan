@@ -1,0 +1,40 @@
+{
+  "name": "@datachan/api",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -b",
+    "start": "node dist/server.js",
+    "bootstrap:admin": "tsx src/scripts/bootstrapAdmin.ts",
+    "schema:init": "tsx src/scripts/initSchema.ts",
+    "seed:dev-roles": "tsx src/scripts/seedDevRoles.ts",
+    "seed:dev-data": "tsx src/scripts/seedDevData.ts",
+    "reset:dev": "tsx src/scripts/resetDevData.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@datachan/shared-types": "*",
+    "acorn": "^8.14.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.7.0",
+    "firebase-admin": "^13.1.0",
+    "mongodb": "^6.13.0",
+    "morgan": "^1.10.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/morgan": "^1.9.9",
+    "@types/node": "^22.13.4",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}

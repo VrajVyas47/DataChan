@@ -1,0 +1,123 @@
+'use client';
+
+import React, { useEffect, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { TopCommandNav } from '@/components/navigation/TopCommandNav';
+import { useTheme } from '@/lib/theme';
+import { api } from '@/lib/api';
+
+export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { navPosition } = useTheme();
+  const [authChecked, setAuthChecked] = useState(false);
+
+  const isStrictPublic = pathname === '/' || pathname === '/login';
+  const isForum = pathname.startsWith('/forum');
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    // Listen for global 401 unauthorized events dispatched by API client
+    const handleUnauthorized = () => {
+      setIsAuthenticated(false);
+      if (!isStrictPublic && !isForum) {
+        router.push(`/login?from=${encodeURIComponent(pathname)}`);
+      }
+    };
+    window.addEventListener('datachan_unauthorized', handleUnauthorized);
+
+    if (isStrictPublic) {
+      setAuthChecked(true);
+      setIsAuthenticated(false);
+    } else {
+      // Validate session with authoritative backend
+      api
+        .getMe()
+        .then(() => {
+          setIsAuthenticated(true);
+          setAuthChecked(true);
+        })
+        .catch(() => {
+          setIsAuthenticated(false);
+          setAuthChecked(true);
+          if (!isForum) {
+            router.push(`/login?from=${encodeURIComponent(pathname)}`);
+          }
+        });
+    }
+
+    return () => {
+      window.removeEventListener('datachan_unauthorized', handleUnauthorized);
+    };
+  }, [pathname, isStrictPublic, isForum, router]);
+
+  if (isStrictPublic) {
+    return (
+      <div className="min-h-screen w-full flex flex-col bg-background text-text">
+        {children}
+      </div>
+    );
+  }
+
+  // Prevent flashing protected dashboard while establishing session
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-background text-text">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          <span className="text-xs font-mono text-text-muted tracking-wider uppercase">
+            Verifying Laboratory Session...
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  // Guest accessing forum: permit unauthenticated access without app dock
+  if (isForum && !isAuthenticated) {
+    return (
+      <div className="min-h-screen w-full flex flex-col bg-background text-text">
+        {children}
+      </div>
+    );
+  }
+
+  // Padding classes depending on dock position
+  const paddingClasses = {
+    bottom: 'pt-4 sm:pt-6 pb-24 md:pb-28',
+    top: 'pt-20 sm:pt-24 pb-6',
+    left: 'pl-20 sm:pl-28 py-4 sm:py-6 pr-4',
+    right: 'pr-20 sm:pr-28 py-4 sm:py-6 pl-4',
+  };
+
+  // Authenticated forum access: retain TopCommandNav with full-width layout
+  if (isForum && isAuthenticated) {
+    return (
+      <div className="min-h-screen w-full flex flex-col justify-between bg-background text-text transition-colors">
+        <TopCommandNav />
+        <main
+          className={`w-full flex-1 flex flex-col transition-all ${
+            paddingClasses[navPosition] || paddingClasses.bottom
+          }`}
+        >
+          {children}
+        </main>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen w-full flex flex-col justify-between p-2 sm:p-4 md:p-6 bg-background text-text transition-colors">
+      <TopCommandNav />
+      <main
+        className={`w-full max-w-[1720px] mx-auto flex-1 flex flex-col transition-all ${
+          paddingClasses[navPosition] || paddingClasses.bottom
+        }`}
+      >
+        <div className="w-full bg-surface rounded-3xl shadow-soft border border-border p-4 sm:p-6 md:p-8 flex-1 flex flex-col">
+          {children}
+        </div>
+      </main>
+    </div>
+  );
+}
