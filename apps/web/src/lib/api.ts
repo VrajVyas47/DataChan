@@ -7,12 +7,20 @@ import {
   DocumentItem,
   QueryResult,
   QueryHistoryItem,
+  QuerySyntaxBreakdownItem,
   Lesson,
+  Course,
+  Module,
+  LessonSection,
+  ContentBlock,
   Challenge,
   ChallengeEvaluationResult,
   DataModel,
   DesignFeedbackItem,
   GeneratedMongoStructure,
+  ImportDatabaseResult,
+  ApplyStructureResult,
+  ModelEntity,
   ThemeId,
   ForumPost,
   ForumReply,
@@ -21,6 +29,8 @@ import {
   ForumStats,
   ForumCategory,
   Classroom,
+  CohortAssignment,
+  CreateCohortAssignmentDto,
 } from '@datachan/shared-types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
@@ -299,6 +309,33 @@ class ApiClient {
     });
   }
 
+  async analyzePlaygroundQuery(
+    rawQuery: string,
+    databaseId?: string,
+    collection?: string
+  ): Promise<{ breakdown: QuerySyntaxBreakdownItem[]; normalized: any; error: string | null }> {
+    return this.request<{ breakdown: QuerySyntaxBreakdownItem[]; normalized: any; error: string | null }>(
+      '/playground/analyze',
+      {
+        method: 'POST',
+        body: JSON.stringify({ rawQuery, databaseId, collection }),
+      }
+    );
+  }
+
+  async getPlaygroundStatus(): Promise<{
+    serverVersion: string;
+    storageEngine: string;
+    status: string;
+    limits: {
+      maxQueryExecutionMs: number;
+      maxResultDocuments: number;
+      maxDocumentSizeBytes: number;
+    };
+  }> {
+    return this.request('/playground/status');
+  }
+
   // --- Query History ---
   async getQueryHistory(limit = 20): Promise<QueryHistoryItem[]> {
     return this.request<QueryHistoryItem[]>(`/query-history?limit=${limit}`);
@@ -308,13 +345,109 @@ class ApiClient {
     return this.request('/query-history', { method: 'DELETE' });
   }
 
-  // --- Learning ---
-  async listLessons(): Promise<Lesson[]> {
-    return this.request<Lesson[]>('/lessons');
+  // --- Learning: Courses ---
+  async listCourses(status?: string): Promise<Course[]> {
+    const q = status ? `?status=${status}` : '';
+    return this.request<Course[]>(`/courses${q}`);
+  }
+
+  async getCourse(id: string): Promise<Course> {
+    return this.request<Course>(`/courses/${id}`);
+  }
+
+  async createCourse(data: { title: string; description: string; status?: 'draft' | 'published'; order?: number }): Promise<Course> {
+    return this.request<Course>('/courses', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateCourse(id: string, data: Partial<Course>): Promise<Course> {
+    return this.request<Course>(`/courses/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteCourse(id: string): Promise<{ deleted: boolean; id: string }> {
+    return this.request(`/courses/${id}`, { method: 'DELETE' });
+  }
+
+  // --- Learning: Modules ---
+  async listModules(courseId?: string, status?: string): Promise<Module[]> {
+    const params = new URLSearchParams();
+    if (courseId) params.append('courseId', courseId);
+    if (status) params.append('status', status);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request<Module[]>(`/modules${qs}`);
+  }
+
+  async getModule(id: string): Promise<Module> {
+    return this.request<Module>(`/modules/${id}`);
+  }
+
+  async createModule(data: { courseId: string; title: string; description?: string; status?: 'draft' | 'published'; order?: number }): Promise<Module> {
+    return this.request<Module>('/modules', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateModule(id: string, data: Partial<Module>): Promise<Module> {
+    return this.request<Module>(`/modules/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteModule(id: string): Promise<{ deleted: boolean; id: string }> {
+    return this.request(`/modules/${id}`, { method: 'DELETE' });
+  }
+
+  async reorderModules(items: { id: string; order: number }[]): Promise<any> {
+    return this.request('/modules/reorder', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    });
+  }
+
+  // --- Learning: Lessons ---
+  async listLessons(moduleId?: string, courseId?: string, status?: string): Promise<Lesson[]> {
+    const params = new URLSearchParams();
+    if (moduleId) params.append('moduleId', moduleId);
+    if (courseId) params.append('courseId', courseId);
+    if (status) params.append('status', status);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request<Lesson[]>(`/lessons${qs}`);
   }
 
   async getLesson(id: string): Promise<Lesson> {
     return this.request<Lesson>(`/lessons/${id}`);
+  }
+
+  async createLesson(data: Partial<Lesson>): Promise<Lesson> {
+    return this.request<Lesson>('/lessons', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateLesson(id: string, data: Partial<Lesson>): Promise<Lesson> {
+    return this.request<Lesson>(`/lessons/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteLesson(id: string): Promise<{ deleted: boolean; id: string }> {
+    return this.request(`/lessons/${id}`, { method: 'DELETE' });
+  }
+
+  async reorderLessons(items: { id: string; order: number }[]): Promise<any> {
+    return this.request('/lessons/reorder', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    });
   }
 
   async completeLesson(id: string): Promise<{ completed: boolean; xpAwarded: number }> {
@@ -330,6 +463,48 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify({ lessonId, rawQuery, databaseId }),
     });
+  }
+
+  // --- Learning: Sections ---
+  async listSections(lessonId?: string, status?: string): Promise<(LessonSection & { isCompleted?: boolean })[]> {
+    const params = new URLSearchParams();
+    if (lessonId) params.append('lessonId', lessonId);
+    if (status) params.append('status', status);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request<(LessonSection & { isCompleted?: boolean })[]>(`/sections${qs}`);
+  }
+
+  async getSection(id: string): Promise<LessonSection & { isCompleted?: boolean }> {
+    return this.request<LessonSection & { isCompleted?: boolean }>(`/sections/${id}`);
+  }
+
+  async createSection(data: Partial<LessonSection>): Promise<LessonSection> {
+    return this.request<LessonSection>('/sections', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateSection(id: string, data: Partial<LessonSection>): Promise<LessonSection> {
+    return this.request<LessonSection>(`/sections/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteSection(id: string): Promise<{ deleted: boolean; id: string }> {
+    return this.request(`/sections/${id}`, { method: 'DELETE' });
+  }
+
+  async reorderSections(items: { id: string; order: number }[]): Promise<any> {
+    return this.request('/sections/reorder', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    });
+  }
+
+  async completeSection(id: string): Promise<{ completedSectionIds: string[]; progressPercent: number; lessonCompleted: boolean; xpAwarded: number }> {
+    return this.request(`/sections/${id}/complete`, { method: 'POST' });
   }
 
   // --- Challenges ---
@@ -353,8 +528,9 @@ class ApiClient {
   }
 
   // --- Data Modeler ---
-  async listDataModels(): Promise<DataModel[]> {
-    return this.request<DataModel[]>('/data-models');
+  async listDataModels(databaseId?: string): Promise<DataModel[]> {
+    const q = databaseId ? `?databaseId=${encodeURIComponent(databaseId)}` : '';
+    return this.request<DataModel[]>(`/data-models${q}`);
   }
 
   async getDataModel(id: string): Promise<DataModel> {
@@ -372,6 +548,24 @@ class ApiClient {
     return this.request<DesignFeedbackItem[]>('/data-models/validate', {
       method: 'POST',
       body: JSON.stringify({ entities, relationships }),
+    });
+  }
+
+  async importDatabaseStructure(databaseId: string): Promise<ImportDatabaseResult> {
+    return this.request<ImportDatabaseResult>('/data-models/import-database', {
+      method: 'POST',
+      body: JSON.stringify({ databaseId }),
+    });
+  }
+
+  async applyStructureToDatabase(
+    databaseId: string,
+    entities?: ModelEntity[],
+    modelId?: string
+  ): Promise<ApplyStructureResult> {
+    return this.request<ApplyStructureResult>('/data-models/apply-structure', {
+      method: 'POST',
+      body: JSON.stringify({ databaseId, entities, modelId }),
     });
   }
 
@@ -451,6 +645,28 @@ class ApiClient {
 
   async getClassroomRoster(classroomId: string): Promise<{ classroom: any; roster: any[] }> {
     return this.request<{ classroom: any; roster: any[] }>(`/classrooms/${classroomId}/roster`);
+  }
+
+  // --- Cohort Assignments ---
+  async listCohortAssignments(classroomId: string): Promise<CohortAssignment[]> {
+    return this.request<CohortAssignment[]>(`/classrooms/${classroomId}/assignments`);
+  }
+
+  async createCohortAssignment(classroomId: string, dto: CreateCohortAssignmentDto): Promise<CohortAssignment> {
+    return this.request<CohortAssignment>(`/classrooms/${classroomId}/assignments`, {
+      method: 'POST',
+      body: JSON.stringify(dto),
+    });
+  }
+
+  async deleteCohortAssignment(classroomId: string, assignmentId: string): Promise<{ unassigned: boolean; id: string }> {
+    return this.request<{ unassigned: boolean; id: string }>(`/classrooms/${classroomId}/assignments/${assignmentId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async listMyCohortAssignments(): Promise<CohortAssignment[]> {
+    return this.request<CohortAssignment[]>('/classrooms/my/assignments');
   }
 
   // --- Admin Portal ---

@@ -33,6 +33,7 @@ import {
   Check,
   MessagesSquare,
   Shield,
+  FileEdit,
 } from 'lucide-react';
 
 export function TopCommandNav() {
@@ -472,6 +473,17 @@ export function TopCommandNav() {
         <User className="w-3.5 h-3.5 text-primary" />
         <span>My Profile & XP</span>
       </Link>
+
+      {(profile?.role === 'faculty' || profile?.role === 'admin') && (
+        <Link
+          href="/learn/studio"
+          onClick={() => setUserMenuOpen(false)}
+          className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-secondary hover:bg-secondary/10 transition-colors"
+        >
+          <FileEdit className="w-3.5 h-3.5 text-secondary" />
+          <span>Curriculum Studio</span>
+        </Link>
+      )}
 
       <Link
         href="/settings"

@@ -64,3 +64,26 @@ export async function closeMongo(): Promise<void> {
     logger.info('MongoDB connection closed');
   }
 }
+
+let cachedServerVersion: string | null = null;
+export async function getMongoServerVersion(): Promise<string> {
+  if (cachedServerVersion) return cachedServerVersion;
+  try {
+    const adminDb = getMongoClient().db('admin');
+    const info = await adminDb.command({ buildInfo: 1 });
+    if (info && info.version) {
+      cachedServerVersion = String(info.version);
+      return cachedServerVersion;
+    }
+  } catch {
+    try {
+      const db = getPlatformDb();
+      const status = await db.command({ serverStatus: 1 });
+      if (status && status.version) {
+        cachedServerVersion = String(status.version);
+        return cachedServerVersion;
+      }
+    } catch {}
+  }
+  return '8.2.5';
+}

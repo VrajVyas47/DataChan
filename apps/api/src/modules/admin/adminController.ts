@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { getPlatformDb, getMongoClient } from '../../database/mongoClient';
+import { getPlatformDb, getMongoClient, getMongoServerVersion } from '../../database/mongoClient';
 import { ApiResponse, UserRole } from '@datachan/shared-types';
 import { ResourceNotFoundError, InvalidRequestError } from '../../errors';
 import { getFirebaseAuth } from '../../security/firebaseAdmin';
@@ -51,7 +51,7 @@ export async function getAdminStats(req: Request, res: Response, next: NextFunct
       system: {
         platformDatabase: db.databaseName,
         uptimeSeconds: serverStatus.uptime || 0,
-        version: serverStatus.version || 'MongoDB 7.0+',
+        version: serverStatus.version || (await getMongoServerVersion()),
         connections: serverStatus.connections?.current || 1,
         status: 'HEALTHY',
       },

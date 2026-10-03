@@ -42,6 +42,7 @@ const CATEGORIES: { id: ForumCategory | 'all'; label: string; icon: string; desc
 export default function ForumDirectoryPage() {
   const [posts, setPosts] = useState<ForumPost[]>([]);
   const [stats, setStats] = useState<ForumStats | null>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
@@ -79,6 +80,10 @@ export default function ForumDirectoryPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    api.getMe().then(setCurrentUser).catch(() => setCurrentUser(null));
+  }, []);
 
   useEffect(() => {
     fetchForumData();
@@ -169,11 +174,11 @@ export default function ForumDirectoryPage() {
       <header className="sticky top-0 z-40 w-full px-6 py-4 backdrop-blur-md bg-[#050608]/80 border-b border-white/[0.08] flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link
-            href="/"
+            href={currentUser ? '/dashboard' : '/'}
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white text-xs font-montserrat transition-all border border-white/10"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Landing Page</span>
+            <span>{currentUser ? 'Back to Dashboard' : 'Landing Page'}</span>
           </Link>
           <div className="h-4 w-px bg-white/10 hidden sm:block" />
           <Link href="/forum" className="flex items-center gap-2 group">

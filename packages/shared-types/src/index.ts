@@ -98,6 +98,7 @@ export interface VirtualDatabase {
   userId: string;
   name: string;
   physicalNamespace: string; // dc_<workspaceId>_<databaseId>
+  status?: 'active' | 'archived' | 'deleted';
   description?: string;
   createdAt: string;
   updatedAt: string;
@@ -168,10 +169,38 @@ export interface Classroom {
   description?: string;
   enrolledStudentIds: string[];
   enrolledStudentsCount?: number;
+  /** @deprecated Legacy orphaned field. Authoritative delivery uses cohort_assignments collection. */
   assignedChallengeIds?: string[];
   syllabusLessonIds?: string[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CohortAssignment {
+  id: string;
+  classroomId: string;
+  targetType: 'lesson' | 'challenge';
+  targetId: string;
+  assignedBy: string;
+  dueDate?: string;
+  status: 'active' | 'archived';
+  createdAt: string;
+  updatedAt: string;
+  // Enriched fields for client rendering
+  cohortName?: string;
+  cohortCode?: string;
+  targetTitle?: string;
+  targetDescription?: string;
+  targetCategory?: string;
+  targetXpReward?: number;
+  targetDifficulty?: string;
+  targetOrder?: number;
+}
+
+export interface CreateCohortAssignmentDto {
+  targetType: 'lesson' | 'challenge';
+  targetId: string;
+  dueDate?: string;
 }
 
 // ----------------------------------------------------------------------------
@@ -218,6 +247,7 @@ export interface QueryResult {
   data: any;
   stats: ExecutionStats;
   breakdown?: QuerySyntaxBreakdownItem[];
+  historyItem?: QueryHistoryItem;
 }
 
 export interface QuerySyntaxBreakdownItem {
@@ -239,29 +269,119 @@ export interface QueryHistoryItem {
   documentsReturned: number;
   documentsCount?: number;
   success: boolean;
+  status?: 'success' | 'error' | 'timeout';
   errorCode?: string;
   errorMessage?: string;
   timestamp: string;
+  createdAt?: string;
 }
 
 // ----------------------------------------------------------------------------
-// Learning Mode
+// Canonical Learning Content Architecture
+// Course -> Module -> Lesson -> Section -> Content Blocks
 // ----------------------------------------------------------------------------
+export type PublishStatus = 'draft' | 'published';
+
+export interface Course {
+  id: string;
+  title: string;
+  description: string;
+  status: PublishStatus;
+  order?: number;
+  modulesCount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Module {
+  id: string;
+  courseId: string;
+  title: string;
+  description: string;
+  order: number;
+  status: PublishStatus;
+  lessonsCount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ContentBlockType =
+  | 'text'
+  | 'code'
+  | 'output'
+  | 'note'
+  | 'image'
+  | 'example'
+  | 'playground';
+
+export interface ContentBlock {
+  id?: string;
+  type: ContentBlockType;
+  order: number;
+  content: string;
+  language?: string;
+  caption?: string;
+  altText?: string;
+  playgroundQuery?: string;
+  targetCollection?: string;
+}
+
+export interface LessonSection {
+  id: string;
+  lessonId: string;
+  title: string;
+  description?: string;
+  order: number;
+  contentBlocks: ContentBlock[];
+  status: PublishStatus;
+  completed?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Lesson {
   id: string;
+  moduleId?: string;
+  courseId?: string;
   order: number;
   title: string;
   category: string;
-  estimatedMinutes: number;
+  estimatedMinutes?: number;
   xpReward: number;
   description: string;
-  conceptMarkdown: string;
-  exampleQuery: string;
-  starterPracticeQuery: string;
-  practiceCollection: string;
-  practiceExplanation: string;
+  conceptMarkdown?: string;
+  exampleQuery?: string;
+  starterPracticeQuery?: string;
+  practiceCollection?: string;
+  practiceExplanation?: string;
   practiceExpectedFilter?: Record<string, any>;
+  practicalId?: string;
+  challengeIds?: string[];
+  difficulty?: string;
+  sampleQuery?: string;
+  expectedPattern?: string;
+  status?: PublishStatus;
+  sectionsCount?: number;
   completed?: boolean;
+  completedSectionIds?: string[];
+  progressPercent?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface LearningProgress {
+  userId: string;
+  lessonId?: string;
+  practicalId?: string;
+  status: 'not_started' | 'in_progress' | 'completed';
+  completedSectionIds?: string[];
+  progressPercent?: number;
+  attempts: number;
+  bestScore: number;
+  xpEarned: number;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  updatedAt: string;
 }
 
 export interface LessonProgress {
@@ -346,6 +466,7 @@ export interface ModelEntity {
   name: string;
   isEmbedded?: boolean;
   color?: string;
+  width?: number;
   position: { x: number; y: number };
   fields: ModelField[];
 }
@@ -366,12 +487,26 @@ export interface ModelRelationship {
 export interface DataModel {
   id: string;
   userId: string;
+  databaseId?: string;
   name: string;
   description?: string;
   entities: ModelEntity[];
   relationships: ModelRelationship[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ImportDatabaseResult {
+  databaseId: string;
+  entities: ModelEntity[];
+  collectionsCount: number;
+}
+
+export interface ApplyStructureResult {
+  databaseId: string;
+  createdCollections: string[];
+  existingCollections: string[];
+  skippedEntities: string[];
 }
 
 export interface DesignFeedbackItem {

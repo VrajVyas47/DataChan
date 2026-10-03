@@ -101,6 +101,7 @@ export async function createDatabase(req: Request, res: Response, next: NextFunc
       userId: req.user!.userId,
       name: name.trim(),
       physicalNamespace,
+      status: 'active',
       description: description || '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

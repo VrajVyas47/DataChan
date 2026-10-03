@@ -10,8 +10,12 @@ Data-Chan uses the official MongoDB Node.js driver (`mongodb`). The architecture
 - `workspaces`: `{ id, userId, name, description, createdAt, updatedAt }`
 - `virtual_databases`: `{ id, workspaceId, userId, name, physicalNamespace, createdAt, updatedAt }`
 - `query_history`: `{ id, userId, workspaceId, databaseId, collection, rawQuery, operation, durationMs, documentsReturned, success, errorCode, timestamp }`
-- `lessons`: `{ id, order, title, category, estimatedMinutes, xpReward, conceptMarkdown, exampleQuery, starterPracticeQuery, practiceCollection }`
-- `lesson_progress`: `{ userId, lessonId, completed, completedAt }`
+- `courses`: `{ id, title, description, status, order, createdAt, updatedAt }`
+- `modules`: `{ id, courseId, title, description, order, status, createdAt, updatedAt }`
+- `lessons`: `{ id, moduleId, courseId, title, description, category, difficulty, order, status, xpReward, practiceCollection, sampleQuery, expectedPattern, challengeIds, practicalId, createdAt, updatedAt }`
+- `lesson_sections`: `{ id, lessonId, title, description, order, status, contentBlocks: [{ type, order, content, language, caption, altText, playgroundQuery, targetCollection }], createdAt, updatedAt }`
+- `learning_progress`: `{ userId, lessonId, practicalId, status, completedSectionIds, progressPercent, attempts, bestScore, xpEarned, startedAt, completedAt, updatedAt }`
+- `lesson_progress`: (legacy collection preserved for backward compatibility) `{ userId, lessonId, completed, completedAt }`
 - `challenges`: `{ id, title, difficulty, category, xpReward, problemStatement, targetCollection, starterQuery, datasetDescription, testCases }`
 - `challenge_attempts`: `{ id, userId, challengeId, query, passed, feedback, executionMs, createdAt }`
 - `data_models`: `{ id, userId, name, description, entities, relationships, createdAt, updatedAt }`

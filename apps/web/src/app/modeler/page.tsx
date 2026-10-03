@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import Link from 'next/link';
 import {
   ReactFlow,
   MiniMap,
@@ -23,15 +24,16 @@ import { api } from '@/lib/api';
 import {
   DataModel,
   ModelEntity,
+  ModelRelationship,
   ModelField,
   FieldDataType,
   DesignFeedbackItem,
   VirtualDatabase,
+  ApplyStructureResult,
 } from '@datachan/shared-types';
 import {
   Boxes,
   Plus,
-  Minus,
   Save,
   CheckCircle2,
   AlertTriangle,
@@ -40,13 +42,14 @@ import {
   Layers,
   Sparkles,
   Trash2,
-  ArrowRight,
-  ChevronDown,
-  Maximize2,
-  Minimize2,
   Lock,
   Unlock,
-  GripHorizontal,
+  Download,
+  ExternalLink,
+  X,
+  ShieldCheck,
+  Check,
+  Info,
 } from 'lucide-react';
 
 // Custom Resizable React Flow Node for MongoDB Collections
@@ -127,7 +130,14 @@ const CollectionNode = ({ data, id, selected }: any) => {
         <div className="flex items-center justify-between pb-2 border-b border-border">
           <div className="flex items-center gap-1.5 truncate">
             <Boxes className="w-4 h-4 text-primary shrink-0" />
-            <span className="font-black text-xs truncate tracking-tight">{data.name}</span>
+            <button
+              type="button"
+              onClick={() => data.onRename?.(id)}
+              className="font-black text-xs truncate tracking-tight text-left hover:text-primary transition-colors cursor-pointer"
+              title="Click to rename collection node"
+            >
+              {data.name}
+            </button>
           </div>
 
           <div className="flex items-center gap-1.5">
@@ -179,10 +189,21 @@ const CollectionNode = ({ data, id, selected }: any) => {
                   {f.type}
                 </span>
                 {f.isRequired && (
-                  <span className="text-[9px] bg-secondary/15 text-secondary px-1 py-0.2 rounded font-bold">
+                  <span className="text-[9px] bg-secondary/15 text-secondary px-1 py-0.2 rounded font-bold" title="Documented Required Field">
                     REQ
                   </span>
                 )}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    data.onDeleteField?.(id, f.id);
+                  }}
+                  className="opacity-0 group-hover/field:opacity-100 text-text-muted hover:text-red-500 transition-opacity p-0.5"
+                  title="Delete Field"
+                >
+                  <XCircle className="w-3 h-3" />
+                </button>
               </div>
             </div>
           ))}
@@ -233,54 +254,48 @@ function CanvasToolbar({
 
   return (
     <div
-      style={{ backgroundColor: 'var(--color-surface-elevated, #ffffff)' }}
-      className="absolute bottom-4 left-4 z-20 flex items-center gap-1.5 p-1.5 rounded-2xl bg-surface-elevated border border-border shadow-lg text-text"
-      role="toolbar"
-      aria-label="Canvas Navigation Toolbar"
+      style={{ backgroundColor: 'var(--color-surface, #1e1e2d)' }}
+      className="absolute bottom-4 left-4 z-10 flex items-center gap-1.5 p-1.5 rounded-2xl border border-border shadow-lg"
     >
-      {/* Zoom In */}
       <button
         type="button"
-        onClick={() => zoomIn({ duration: 250 })}
-        className="w-8 h-8 rounded-xl flex items-center justify-center bg-surface hover:bg-surface-high text-text hover:text-primary border border-border transition-colors active:scale-95"
-        title="Zoom In (+)"
+        onClick={() => zoomIn({ duration: 300 })}
+        className="w-8 h-8 flex items-center justify-center rounded-xl bg-surface-high hover:bg-surface-elevated text-text transition-colors"
+        title="Zoom In"
         aria-label="Zoom In"
       >
         <Plus className="w-4 h-4" />
       </button>
 
-      {/* Zoom Out */}
       <button
         type="button"
-        onClick={() => zoomOut({ duration: 250 })}
-        className="w-8 h-8 rounded-xl flex items-center justify-center bg-surface hover:bg-surface-high text-text hover:text-primary border border-border transition-colors active:scale-95"
-        title="Zoom Out (-)"
+        onClick={() => zoomOut({ duration: 300 })}
+        className="w-8 h-8 flex items-center justify-center rounded-xl bg-surface-high hover:bg-surface-elevated text-text transition-colors"
+        title="Zoom Out"
         aria-label="Zoom Out"
       >
-        <Minus className="w-4 h-4" />
+        <span className="font-bold text-base leading-none">−</span>
       </button>
 
-      {/* Fit to View */}
       <button
         type="button"
-        onClick={() => fitView({ padding: 0.2, duration: 400 })}
-        className="w-8 h-8 rounded-xl flex items-center justify-center bg-surface hover:bg-surface-high text-text hover:text-primary border border-border transition-colors active:scale-95"
-        title="Fit View"
+        onClick={() => fitView({ duration: 300, padding: 0.2 })}
+        className="px-2.5 h-8 flex items-center justify-center rounded-xl bg-surface-high hover:bg-surface-elevated text-text text-xs font-bold transition-colors"
+        title="Fit All Nodes in View"
         aria-label="Fit View"
       >
-        <Maximize2 className="w-4 h-4" />
+        Fit
       </button>
 
       <div className="w-[1px] h-5 bg-border mx-0.5" />
 
-      {/* Lock / Interactive Mode Toggle */}
       <button
         type="button"
-        onClick={() => setIsLocked((prev) => !prev)}
-        className={`flex items-center gap-1.5 px-3 h-8 rounded-xl text-xs font-bold transition-all border ${
+        onClick={() => setIsLocked(!isLocked)}
+        className={`px-2.5 h-8 flex items-center gap-1.5 rounded-xl font-bold transition-colors ${
           isLocked
-            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/40 hover:bg-amber-500/25'
-            : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/25'
+            ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30'
+            : 'bg-surface-high hover:bg-surface-elevated text-text'
         }`}
         title={isLocked ? 'Canvas Locked (Click to allow movement)' : 'Interactive Mode (Click to lock positions)'}
         aria-label={isLocked ? 'Canvas Locked' : 'Interactive Mode'}
@@ -305,20 +320,161 @@ const nodeTypes = {
   collectionNode: CollectionNode,
 };
 
+// Starter demo model used ONLY when the user has no persisted models for the selected DB
+function getStarterModel(): {
+  name: string;
+  description: string;
+  entities: ModelEntity[];
+  relationships: ModelRelationship[];
+} {
+  return {
+    name: 'E-Commerce Lab Model',
+    description: 'Order, Customer, and Product document model',
+    entities: [
+      {
+        id: 'node-users',
+        name: 'customers',
+        position: { x: 50, y: 50 },
+        width: 320,
+        fields: [
+          { id: 'f1', name: '_id', type: 'ObjectId', isRequired: true },
+          { id: 'f2', name: 'name', type: 'String', isRequired: true },
+          { id: 'f3', name: 'email', type: 'String', isRequired: true },
+          { id: 'f4', name: 'tier', type: 'String', isRequired: false },
+        ],
+      },
+      {
+        id: 'node-orders',
+        name: 'orders',
+        position: { x: 440, y: 120 },
+        width: 340,
+        fields: [
+          { id: 'f5', name: '_id', type: 'ObjectId', isRequired: true },
+          { id: 'f6', name: 'customerId', type: 'ObjectId', isRequired: true },
+          { id: 'f7', name: 'totalAmount', type: 'Number', isRequired: true },
+          { id: 'f8', name: 'items', type: 'Array', isRequired: true },
+        ],
+      },
+    ],
+    relationships: [
+      {
+        id: 'e-customers-orders',
+        sourceEntityId: 'node-users',
+        targetEntityId: 'node-orders',
+        cardinality: '1:N',
+        strategy: 'referenced',
+      },
+    ],
+  };
+}
+
+// Convert ModelEntity to React Flow Node with required callbacks
+function entityToNode(
+  entity: ModelEntity,
+  callbacks: {
+    onDelete: (id: string) => void;
+    onAddField: (id: string) => void;
+    onDeleteField: (nodeId: string, fieldId: string) => void;
+    onRename: (nodeId: string) => void;
+    onResize: (nodeId: string, w: number, h: number | string) => void;
+  }
+): Node {
+  const width = (entity as any).width || 320;
+  return {
+    id: entity.id,
+    type: 'collectionNode',
+    position: entity.position || { x: 50, y: 50 },
+    style: { width: `${width}px` },
+    data: {
+      name: entity.name,
+      width,
+      fields: entity.fields || [],
+      onDelete: callbacks.onDelete,
+      onAddField: callbacks.onAddField,
+      onDeleteField: callbacks.onDeleteField,
+      onRename: callbacks.onRename,
+      onResize: callbacks.onResize,
+    },
+  };
+}
+
+// Convert ModelRelationship to React Flow Edge
+function relationshipToEdge(rel: ModelRelationship): Edge {
+  const strategy = rel.strategy || 'referenced';
+  const cardinality = rel.cardinality || '1:N';
+  return {
+    id: rel.id,
+    source: rel.sourceEntityId,
+    target: rel.targetEntityId,
+    animated: true,
+    label: `${cardinality} (${strategy})`,
+    style: { stroke: 'var(--color-primary)', strokeWidth: 2 },
+  };
+}
+
 export default function ModelerPage() {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const [currentModelId, setCurrentModelId] = useState<string | null>(null);
+  const [savedModels, setSavedModels] = useState<DataModel[]>([]);
   const [modelName, setModelName] = useState('E-Commerce Lab Model');
   const [modelDescription, setModelDescription] = useState('Order, Customer, and Product document model');
   const [feedback, setFeedback] = useState<DesignFeedbackItem[]>([]);
   const [databases, setDatabases] = useState<VirtualDatabase[]>([]);
   const [selectedDb, setSelectedDb] = useState<string>('');
   const [saving, setSaving] = useState(false);
-  const [generating, setGenerating] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [applying, setApplying] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isLocked, setIsLocked] = useState(false);
 
+  // In-App Modal Dialog States (Replacing all window.prompt/confirm)
+  const [showCreateColModal, setShowCreateColModal] = useState(false);
+  const [newColName, setNewColName] = useState('');
+  const [colNameError, setColNameError] = useState<string | null>(null);
+
+  const [showRenameColModal, setShowRenameColModal] = useState(false);
+  const [renamingNodeId, setRenamingNodeId] = useState<string | null>(null);
+  const [renamingColName, setRenamingColName] = useState('');
+  const [renameError, setRenameError] = useState<string | null>(null);
+
+  const [showAddFieldModal, setShowAddFieldModal] = useState(false);
+  const [addFieldNodeId, setAddFieldNodeId] = useState<string | null>(null);
+  const [newFieldName, setNewFieldName] = useState('');
+  const [newFieldType, setNewFieldType] = useState<FieldDataType>('String');
+  const [newFieldRequired, setNewFieldRequired] = useState(false);
+  const [fieldError, setFieldError] = useState<string | null>(null);
+
+  const [showConfirmImportModal, setShowConfirmImportModal] = useState(false);
+
+  const [showApplyResultModal, setShowApplyResultModal] = useState(false);
+  const [applyResultData, setApplyResultData] = useState<ApplyStructureResult | null>(null);
+
+  // Deterministic validation helper
+  const runValidation = useCallback(async (currNodes: Node[], currEdges: Edge[]) => {
+    const entities = currNodes.map((n) => ({
+      id: n.id,
+      name: n.data.name as string,
+      fields: n.data.fields as ModelField[],
+      position: n.position,
+    }));
+
+    const relationships = currEdges.map((e) => ({
+      id: e.id,
+      sourceEntityId: e.source,
+      targetEntityId: e.target,
+      cardinality: '1:N' as const,
+      strategy: e.label?.toString().includes('embedded') ? ('embedded' as const) : ('referenced' as const),
+    }));
+
+    try {
+      const fb = await api.validateDataModel(entities, relationships);
+      setFeedback(fb);
+    } catch {}
+  }, []);
+
+  // Node dimension update
   const handleResizeNode = useCallback((nodeId: string, newWidth: number, newHeight: number | string) => {
     setNodes((nds) =>
       nds.map((n) => {
@@ -342,75 +498,158 @@ export default function ModelerPage() {
     );
   }, [setNodes]);
 
-  // Initial starter data model
+  // Delete an entire collection node and any connected edges
+  const handleDeleteNode = useCallback(
+    (nodeId: string) => {
+      setNodes((nds) => {
+        const nextNodes = nds.filter((n) => n.id !== nodeId);
+        setEdges((eds) => {
+          const nextEdges = eds.filter((e) => e.source !== nodeId && e.target !== nodeId);
+          runValidation(nextNodes, nextEdges);
+          return nextEdges;
+        });
+        return nextNodes;
+      });
+    },
+    [runValidation, setNodes, setEdges]
+  );
+
+  // Open in-app dialog to rename a collection node
+  const handleRenameNode = useCallback(
+    (nodeId: string) => {
+      setNodes((nds) => {
+        const targetNode = nds.find((n) => n.id === nodeId);
+        if (targetNode) {
+          setRenamingNodeId(nodeId);
+          setRenamingColName((targetNode.data.name as string) || '');
+          setRenameError(null);
+          setShowRenameColModal(true);
+        }
+        return nds;
+      });
+    },
+    [setNodes]
+  );
+
+  // Open in-app dialog to add a field
+  const handleAddField = useCallback(
+    (nodeId: string) => {
+      setAddFieldNodeId(nodeId);
+      setNewFieldName('');
+      setNewFieldType('String');
+      setNewFieldRequired(false);
+      setFieldError(null);
+      setShowAddFieldModal(true);
+    },
+    []
+  );
+
+  // Delete a specific field from a collection
+  const handleDeleteField = useCallback(
+    (nodeId: string, fieldId: string) => {
+      setNodes((nds) => {
+        const next = nds.map((n) => {
+          if (n.id === nodeId) {
+            const updatedFields = (n.data.fields as ModelField[]).filter((f) => f.id !== fieldId);
+            return {
+              ...n,
+              data: {
+                ...n.data,
+                fields: updatedFields,
+              },
+            };
+          }
+          return n;
+        });
+        setEdges((eds) => {
+          runValidation(next, eds);
+          return eds;
+        });
+        return next;
+      });
+    },
+    [runValidation, setNodes, setEdges]
+  );
+
+  // Apply a model definition directly onto the canvas
+  const applyModelToCanvas = useCallback(
+    (model: {
+      name: string;
+      description?: string;
+      entities: ModelEntity[];
+      relationships: ModelRelationship[];
+    }) => {
+      const callbacks = {
+        onDelete: handleDeleteNode,
+        onAddField: handleAddField,
+        onDeleteField: handleDeleteField,
+        onRename: handleRenameNode,
+        onResize: handleResizeNode,
+      };
+
+      const restoredNodes = (model.entities || []).map((ent) => entityToNode(ent, callbacks));
+      const restoredEdges = (model.relationships || []).map(relationshipToEdge);
+
+      setModelName(model.name || 'Untitled Model');
+      setModelDescription(model.description || '');
+      setNodes(restoredNodes);
+      setEdges(restoredEdges);
+      runValidation(restoredNodes, restoredEdges);
+    },
+    [
+      handleDeleteNode,
+      handleAddField,
+      handleDeleteField,
+      handleRenameNode,
+      handleResizeNode,
+      runValidation,
+      setNodes,
+      setEdges,
+    ]
+  );
+
+  // Initial load: Fetch real DBs and persisted user data models from MongoDB
   useEffect(() => {
     async function loadData() {
       try {
-        const dbs = await api.listDatabases();
+        // 1. Fetch virtual databases
+        const dbs = await api.listDatabases().catch(() => []);
         setDatabases(dbs);
-        if (dbs.length > 0) setSelectedDb(dbs[0].id);
 
-        // Seed default starter nodes with customizable dimensions
-        const initialNodes: Node[] = [
-          {
-            id: 'node-users',
-            type: 'collectionNode',
-            position: { x: 50, y: 50 },
-            data: {
-              name: 'customers',
-              width: 320,
-              fields: [
-                { id: 'f1', name: '_id', type: 'ObjectId', isRequired: true },
-                { id: 'f2', name: 'name', type: 'String', isRequired: true },
-                { id: 'f3', name: 'email', type: 'String', isRequired: true },
-                { id: 'f4', name: 'tier', type: 'String', isRequired: false },
-              ],
-              onDelete: handleDeleteNode,
-              onAddField: handleAddField,
-              onResize: handleResizeNode,
-            },
-          },
-          {
-            id: 'node-orders',
-            type: 'collectionNode',
-            position: { x: 440, y: 120 },
-            data: {
-              name: 'orders',
-              width: 340,
-              fields: [
-                { id: 'f5', name: '_id', type: 'ObjectId', isRequired: true },
-                { id: 'f6', name: 'customerId', type: 'ObjectId', isRequired: true },
-                { id: 'f7', name: 'totalAmount', type: 'Number', isRequired: true },
-                { id: 'f8', name: 'items', type: 'Array', isRequired: true },
-              ],
-              onDelete: handleDeleteNode,
-              onAddField: handleAddField,
-              onResize: handleResizeNode,
-            },
-          },
-        ];
+        const initialDb = dbs.length > 0 ? dbs[0].id : '';
+        setSelectedDb(initialDb);
 
-        const initialEdges: Edge[] = [
-          {
-            id: 'e-customers-orders',
-            source: 'node-users',
-            target: 'node-orders',
-            animated: true,
-            label: '1:N (referenced)',
-            style: { stroke: 'var(--color-primary)', strokeWidth: 2 },
-          },
-        ];
+        // 2. Fetch authenticated user's persisted data models filtered to initialDb
+        const models = await api.listDataModels(initialDb || undefined).catch((err) => {
+          console.error('Failed to list data models:', err);
+          return [] as DataModel[];
+        });
 
-        setNodes(initialNodes);
-        setEdges(initialEdges);
-        runValidation(initialNodes, initialEdges);
+        setSavedModels(models);
+
+        if (models && models.length > 0) {
+          // A saved model exists for this database -> restore the most recently updated model
+          const active = models[0];
+          setCurrentModelId(active.id);
+          applyModelToCanvas(active);
+        } else {
+          // No saved model exists -> mount the starter template
+          setCurrentModelId(null);
+          const starter = getStarterModel();
+          if (dbs.length > 0) {
+            starter.name = `${dbs[0].name} Model`;
+          }
+          applyModelToCanvas(starter);
+        }
       } catch (err) {
         console.error('Failed to init modeler:', err);
       }
     }
-    loadData();
-  }, [handleResizeNode]);
 
+    loadData();
+  }, [applyModelToCanvas]);
+
+  // Connect new edge
   const onConnect = useCallback(
     (params: Connection) => {
       setEdges((eds) => {
@@ -427,37 +666,257 @@ export default function ModelerPage() {
         return next;
       });
     },
-    [nodes]
+    [nodes, runValidation, setEdges]
   );
 
-  function handleDeleteNode(nodeId: string) {
+  // Click on edge to toggle relationship strategy between embedded and referenced
+  const onEdgeClick = useCallback(
+    (_: React.MouseEvent, edge: Edge) => {
+      setEdges((eds) => {
+        const next = eds.map((e) => {
+          if (e.id === edge.id) {
+            const isCurrentlyEmbedded = e.label?.toString().includes('embedded');
+            const nextLabel = isCurrentlyEmbedded ? '1:N (referenced)' : '1:N (embedded)';
+            return {
+              ...e,
+              label: nextLabel,
+            };
+          }
+          return e;
+        });
+        runValidation(nodes, next);
+        return next;
+      });
+    },
+    [nodes, runValidation, setEdges]
+  );
+
+  // Switch database context
+  async function handleDatabaseChange(newDbId: string) {
+    setSelectedDb(newDbId);
+    try {
+      const models = await api.listDataModels(newDbId).catch(() => []);
+      setSavedModels(models);
+      if (models.length > 0) {
+        const active = models[0];
+        setCurrentModelId(active.id);
+        applyModelToCanvas(active);
+      } else {
+        setCurrentModelId(null);
+        const starter = getStarterModel();
+        const targetDb = databases.find((d) => d.id === newDbId);
+        starter.name = `${targetDb?.name || 'Database'} Model`;
+        applyModelToCanvas(starter);
+      }
+    } catch (err: any) {
+      console.error('Failed to change database context:', err);
+    }
+  }
+
+  // Switch between saved models or start a new one
+  async function handleSelectModel(selectedId: string) {
+    if (selectedId === '__new__') {
+      setCurrentModelId(null);
+      const starter = getStarterModel();
+      const targetDb = databases.find((d) => d.id === selectedDb);
+      starter.name = `${targetDb?.name || 'Database'} Model`;
+      starter.description = '';
+      applyModelToCanvas(starter);
+      return;
+    }
+
+    const found = savedModels.find((m) => m.id === selectedId);
+    if (found) {
+      setCurrentModelId(found.id);
+      applyModelToCanvas(found);
+    } else {
+      try {
+        const fetched = await api.getDataModel(selectedId);
+        setCurrentModelId(fetched.id);
+        applyModelToCanvas(fetched);
+      } catch (err: any) {
+        setErrorMsg(err.message || 'Failed to load model');
+        setTimeout(() => setErrorMsg(null), 4000);
+      }
+    }
+  }
+
+  // Save current canvas to MongoDB and update state with authoritative server response
+  async function handleSaveModel() {
+    setSaving(true);
+    try {
+      const entities: ModelEntity[] = nodes.map((n) => ({
+        id: n.id,
+        name: n.data.name as string,
+        fields: n.data.fields as ModelField[],
+        position: n.position,
+        width: (n.data as any).width || 320,
+      }));
+
+      const relationships: ModelRelationship[] = edges.map((e) => {
+        const isEmbedded = e.label?.toString().includes('embedded') ?? false;
+        return {
+          id: e.id,
+          sourceEntityId: e.source,
+          targetEntityId: e.target,
+          cardinality: '1:N' as const,
+          strategy: isEmbedded ? ('embedded' as const) : ('referenced' as const),
+        };
+      });
+
+      const saved = await api.saveOrUpdateDataModel({
+        id: currentModelId || undefined,
+        databaseId: selectedDb || undefined,
+        name: modelName.trim() || 'Untitled Model',
+        description: modelDescription,
+        entities,
+        relationships,
+      });
+
+      // Update state with authoritative server response
+      setCurrentModelId(saved.id);
+      setModelName(saved.name);
+      setModelDescription(saved.description || '');
+
+      // Refresh saved models list from MongoDB scoped to current database
+      const refreshedModels = await api.listDataModels(selectedDb || undefined).catch(() => [saved]);
+      setSavedModels(refreshedModels);
+
+      setStatusMsg(`Data model "${saved.name}" saved successfully!`);
+      setTimeout(() => setStatusMsg(null), 3000);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to save data model');
+      setTimeout(() => setErrorMsg(null), 4000);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // In-app modal submit: Create Collection Node
+  function handleCreateCollectionSubmit() {
+    const trimmed = newColName.trim();
+    if (!trimmed) {
+      setColNameError('Collection name is required.');
+      return;
+    }
+    if (trimmed.includes('$')) {
+      setColNameError('Collection name cannot contain "$" symbol.');
+      return;
+    }
+    if (trimmed.startsWith('system.')) {
+      setColNameError('Collection name cannot start with "system." reserved prefix.');
+      return;
+    }
+
+    const callbacks = {
+      onDelete: handleDeleteNode,
+      onAddField: handleAddField,
+      onDeleteField: handleDeleteField,
+      onRename: handleRenameNode,
+      onResize: handleResizeNode,
+    };
+
+    const cleanName = trimmed.toLowerCase().replace(/\s+/g, '_');
+    const newNode: Node = {
+      id: `node_${Date.now()}`,
+      type: 'collectionNode',
+      position: { x: Math.random() * 250 + 100, y: Math.random() * 200 + 100 },
+      style: { width: '320px' },
+      data: {
+        name: cleanName,
+        width: 320,
+        fields: [
+          { id: `f_${Date.now()}_id`, name: '_id', type: 'ObjectId', isRequired: true },
+          { id: `f_${Date.now()}_name`, name: 'name', type: 'String', isRequired: true },
+        ],
+        onDelete: callbacks.onDelete,
+        onAddField: callbacks.onAddField,
+        onDeleteField: callbacks.onDeleteField,
+        onRename: callbacks.onRename,
+        onResize: callbacks.onResize,
+      },
+    };
+
     setNodes((nds) => {
-      const next = nds.filter((n) => n.id !== nodeId);
+      const next = [...nds, newNode];
       runValidation(next, edges);
       return next;
     });
+
+    setShowCreateColModal(false);
+    setNewColName('');
+    setColNameError(null);
   }
 
-  function handleAddField(nodeId: string) {
-    const fieldName = prompt('Enter new field name (e.g. status, createdAt, tags):');
-    if (!fieldName || !fieldName.trim()) return;
+  // In-app modal submit: Rename Collection Node (Conceptual design rename only)
+  function handleRenameCollectionSubmit() {
+    if (!renamingNodeId) return;
+    const trimmed = renamingColName.trim();
+    if (!trimmed) {
+      setRenameError('Collection name cannot be empty.');
+      return;
+    }
+    if (trimmed.includes('$') || trimmed.startsWith('system.')) {
+      setRenameError('Invalid collection name format.');
+      return;
+    }
 
-    const fieldType = (prompt(
-      'Enter field type: String, Number, Boolean, Date, ObjectId, Array, Object'
-    ) || 'String') as FieldDataType;
+    const cleanName = trimmed.toLowerCase().replace(/\s+/g, '_');
+    setNodes((nds) => {
+      const next = nds.map((n) => {
+        if (n.id === renamingNodeId) {
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              name: cleanName,
+            },
+          };
+        }
+        return n;
+      });
+      runValidation(next, edges);
+      return next;
+    });
+
+    setShowRenameColModal(false);
+    setRenamingNodeId(null);
+    setRenamingColName('');
+    setRenameError(null);
+  }
+
+  // In-app modal submit: Add Field to Collection Node
+  function handleAddFieldSubmit() {
+    if (!addFieldNodeId) return;
+    const trimmed = newFieldName.trim();
+    if (!trimmed) {
+      setFieldError('Field name is required.');
+      return;
+    }
+    if (trimmed.includes('.') || trimmed.includes('$')) {
+      setFieldError('Field name cannot contain "." or "$".');
+      return;
+    }
 
     setNodes((nds) => {
       const next = nds.map((n) => {
-        if (n.id === nodeId) {
-          const updatedFields = [
-            ...(n.data.fields as ModelField[]),
+        if (n.id === addFieldNodeId) {
+          const currentFields = (n.data.fields as ModelField[]) || [];
+          if (currentFields.some((f) => f.name.toLowerCase() === trimmed.toLowerCase())) {
+            setFieldError(`Field "${trimmed}" already exists in this collection.`);
+            return n;
+          }
+
+          const updatedFields: ModelField[] = [
+            ...currentFields,
             {
-              id: `f_${Date.now()}`,
-              name: fieldName.trim(),
-              type: fieldType,
-              isRequired: false,
+              id: `f_${Date.now()}_${trimmed}`,
+              name: trimmed,
+              type: newFieldType,
+              isRequired: newFieldRequired,
             },
           ];
+
           return {
             ...n,
             data: {
@@ -471,135 +930,87 @@ export default function ModelerPage() {
       runValidation(next, edges);
       return next;
     });
+
+    setShowAddFieldModal(false);
+    setAddFieldNodeId(null);
+    setNewFieldName('');
+    setFieldError(null);
   }
 
-  function handleAddCollection() {
-    const name = prompt('Enter new collection name (e.g. products, reviews):');
-    if (!name || !name.trim()) return;
+  // Import actual MongoDB collections & inferred fields from selected virtual database
+  async function handleConfirmImport() {
+    if (!selectedDb) {
+      setErrorMsg('Please select a target database first.');
+      setShowConfirmImportModal(false);
+      return;
+    }
 
-    const newNode: Node = {
-      id: `node_${Date.now()}`,
-      type: 'collectionNode',
-      position: { x: Math.random() * 250 + 100, y: Math.random() * 200 + 100 },
-      data: {
-        name: name.trim(),
-        width: 300,
-        fields: [
-          { id: `f_${Date.now()}_id`, name: '_id', type: 'ObjectId', isRequired: true },
-          { id: `f_${Date.now()}_title`, name: 'title', type: 'String', isRequired: true },
-        ],
+    setImporting(true);
+    try {
+      const res = await api.importDatabaseStructure(selectedDb);
+      const targetDb = databases.find((d) => d.id === selectedDb);
+
+      const callbacks = {
         onDelete: handleDeleteNode,
         onAddField: handleAddField,
+        onDeleteField: handleDeleteField,
+        onRename: handleRenameNode,
         onResize: handleResizeNode,
-      },
-    };
+      };
 
-    setNodes((nds) => {
-      const next = [...nds, newNode];
-      runValidation(next, edges);
-      return next;
-    });
-  }
+      const restoredNodes = res.entities.map((ent) => entityToNode(ent, callbacks));
+      setNodes(restoredNodes);
+      setEdges([]); // MongoDB has no rigid foreign keys; import starts with actual collections
+      setModelName(`${targetDb?.name || 'Imported'} Real Schema`);
+      setModelDescription(`Observed collections imported from ${targetDb?.name || 'database'}`);
+      setCurrentModelId(null); // Fresh imported model ready to be saved
 
-  async function runValidation(currNodes: Node[], currEdges: Edge[]) {
-    const entities = currNodes.map((n) => ({
-      id: n.id,
-      name: n.data.name as string,
-      fields: n.data.fields as ModelField[],
-      position: n.position,
-    }));
-
-    const relationships = currEdges.map((e) => ({
-      id: e.id,
-      sourceEntityId: e.source,
-      targetEntityId: e.target,
-      cardinality: '1:N' as const,
-      strategy: e.label?.toString().includes('embedded') ? ('embedded' as const) : ('referenced' as const),
-    }));
-
-    try {
-      const fb = await api.validateDataModel(entities, relationships);
-      setFeedback(fb);
-    } catch {}
-  }
-
-  async function handleSaveModel() {
-    setSaving(true);
-    try {
-      const entities = nodes.map((n) => ({
-        id: n.id,
-        name: n.data.name as string,
-        fields: n.data.fields as ModelField[],
-        position: n.position,
-      }));
-
-      const relationships = edges.map((e) => ({
-        id: e.id,
-        sourceEntityId: e.source,
-        targetEntityId: e.target,
-        cardinality: '1:N' as const,
-        strategy: e.label?.toString().includes('embedded') ? ('embedded' as const) : ('referenced' as const),
-      }));
-
-      await api.saveOrUpdateDataModel({
-        name: modelName,
-        description: modelDescription,
-        entities,
-        relationships,
-      });
-
-      setStatusMsg('Data model saved successfully!');
-      setTimeout(() => setStatusMsg(null), 3000);
+      runValidation(restoredNodes, []);
+      setShowConfirmImportModal(false);
+      setStatusMsg(`Imported ${res.collectionsCount} real collections from "${targetDb?.name || 'database'}"!`);
+      setTimeout(() => setStatusMsg(null), 4000);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to save data model');
-      setTimeout(() => setErrorMsg(null), 4000);
+      setErrorMsg(`Import failed: ${err.message}`);
+      setTimeout(() => setErrorMsg(null), 4500);
     } finally {
-      setSaving(false);
+      setImporting(false);
     }
   }
 
-  async function handleGenerateStructure() {
+  // Apply model structure non-destructively to the real virtual database
+  async function handleApplyStructure() {
     if (!selectedDb) {
       setErrorMsg('Please select a target database first.');
       setTimeout(() => setErrorMsg(null), 4000);
       return;
     }
-    setGenerating(true);
+
+    setApplying(true);
     try {
-      const entities = nodes.map((n) => ({
+      const entities: ModelEntity[] = nodes.map((n) => ({
         id: n.id,
         name: n.data.name as string,
         fields: n.data.fields as ModelField[],
         position: n.position,
+        width: (n.data as any).width || 320,
       }));
 
-      const relationships = edges.map((e) => ({
-        id: e.id,
-        sourceEntityId: e.source,
-        targetEntityId: e.target,
-        cardinality: '1:N' as const,
-        strategy: e.label?.toString().includes('embedded') ? ('embedded' as const) : ('referenced' as const),
-      }));
-
-      const saved = await api.saveOrUpdateDataModel({
-        name: modelName,
-        description: modelDescription,
-        entities,
-        relationships,
-      });
-
-      const genRes = await api.generateMongoStructure(saved.id, selectedDb);
-      setStatusMsg(
-        `Generated ${genRes.collections.length} collections with sample BSON documents in your target database!`
-      );
+      const res = await api.applyStructureToDatabase(selectedDb, entities, currentModelId || undefined);
+      setApplyResultData(res);
+      setShowApplyResultModal(true);
+      setStatusMsg(`Applied structure to "${databases.find((d) => d.id === selectedDb)?.name || 'database'}"!`);
       setTimeout(() => setStatusMsg(null), 4000);
     } catch (err: any) {
-      setErrorMsg(`Generation failed: ${err.message}`);
+      setErrorMsg(`Failed to apply structure: ${err.message}`);
       setTimeout(() => setErrorMsg(null), 4000);
     } finally {
-      setGenerating(false);
+      setApplying(false);
     }
   }
+
+  const selectedDbObj = databases.find((d) => d.id === selectedDb);
+  const targetNodeForRename = nodes.find((n) => n.id === renamingNodeId);
+  const targetNodeForField = nodes.find((n) => n.id === addFieldNodeId);
 
   return (
     <div className="flex flex-col gap-6 w-full flex-1 pb-20">
@@ -624,59 +1035,147 @@ export default function ModelerPage() {
       )}
 
       {/* Top Header & Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-text flex items-center gap-2.5">
-            <Boxes className="w-7 h-7 text-primary" />
-            <span>ER / Data Model Builder</span>
-          </h1>
-          <p className="text-xs sm:text-sm text-text-muted mt-1">
-            Design MongoDB document models (embedding vs referencing) with freely resizable entity boxes.
-          </p>
+      <div className="flex flex-col gap-4 pb-4 border-b border-border">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-text flex items-center gap-2.5">
+              <Boxes className="w-7 h-7 text-primary" />
+              <span>Data Modeler</span>
+            </h1>
+            <p className="text-xs sm:text-sm text-text-muted mt-1">
+              Design MongoDB document models (embedding vs referencing) linked to your real virtual databases.
+            </p>
+          </div>
+
+          {/* Quick Context & Playground Link */}
+          <div className="flex items-center gap-2">
+            {selectedDb && (
+              <Link
+                href={`/playground?databaseId=${selectedDb}`}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface hover:bg-surface-high border border-border text-xs font-bold text-text transition-all"
+                title="Open this database in Playground"
+              >
+                <ExternalLink className="w-3.5 h-3.5 text-primary" />
+                <span>Open in Playground</span>
+              </Link>
+            )}
+
+            <button
+              onClick={() => {
+                setNewColName('');
+                setColNameError(null);
+                setShowCreateColModal(true);
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-surface hover:bg-surface-high border border-border text-xs font-bold text-text transition-all"
+            >
+              <Plus className="w-3.5 h-3.5 text-primary" />
+              <span>Add Collection</span>
+            </button>
+
+            <button
+              onClick={handleSaveModel}
+              disabled={saving}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-surface hover:bg-surface-high border border-border text-xs font-bold text-text transition-all disabled:opacity-50"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>{saving ? 'Saving...' : 'Save Model'}</span>
+            </button>
+          </div>
         </div>
 
-        <div className="flex items-center flex-wrap gap-2">
+        {/* Toolbar: Database Selector, Saved Models, Import & Apply Structure */}
+        <div className="flex items-center flex-wrap gap-2.5 bg-surface-low/50 p-2.5 rounded-2xl border border-border">
           {/* Target DB Selector */}
-          <div className="flex items-center gap-2 bg-surface px-3 py-1.5 rounded-full border border-border">
-            <Database className="w-3.5 h-3.5 text-primary" />
+          <div className="flex items-center gap-2 bg-surface px-3 py-1.5 rounded-xl border border-border">
+            <Database className="w-3.5 h-3.5 text-primary shrink-0" />
+            <span className="text-[11px] font-bold text-text-muted">Database:</span>
             <select
               value={selectedDb}
-              onChange={(e) => setSelectedDb(e.target.value)}
-              className="bg-transparent text-xs font-bold text-text focus:outline-none cursor-pointer"
+              onChange={(e) => handleDatabaseChange(e.target.value)}
+              className="bg-transparent text-xs font-bold text-text focus:outline-none cursor-pointer max-w-[170px] truncate"
+              title="Select Linked Virtual Database"
+              aria-label="Select Linked Virtual Database"
             >
               {databases.map((db) => (
                 <option key={db.id} value={db.id} className="bg-surface text-text">
-                  Target: {db.name}
+                  {db.name}
                 </option>
               ))}
             </select>
           </div>
 
+          {/* Saved Model Selector for this DB */}
+          <div className="flex items-center gap-2 bg-surface px-3 py-1.5 rounded-xl border border-border">
+            <Layers className="w-3.5 h-3.5 text-primary shrink-0" />
+            <span className="text-[11px] font-bold text-text-muted">Model:</span>
+            <select
+              value={currentModelId || '__new__'}
+              onChange={(e) => handleSelectModel(e.target.value)}
+              className="bg-transparent text-xs font-bold text-text focus:outline-none cursor-pointer max-w-[170px] truncate"
+              title="Select Saved Model"
+              aria-label="Select Saved Model"
+            >
+              {savedModels.map((m) => (
+                <option key={m.id} value={m.id} className="bg-surface text-text">
+                  {m.name}
+                </option>
+              ))}
+              <option value="__new__" className="bg-surface text-text">
+                + New Model
+              </option>
+            </select>
+          </div>
+
+          {/* Model Name Input */}
+          <input
+            type="text"
+            value={modelName}
+            onChange={(e) => setModelName(e.target.value)}
+            className="bg-surface hover:bg-surface-high focus:bg-surface border border-border rounded-xl px-3 py-1.5 text-xs font-bold text-text focus:outline-none focus:ring-1 focus:ring-primary w-40 sm:w-52"
+            placeholder="Model Name"
+            title="Edit Model Name"
+            aria-label="Model Name"
+          />
+
+          <div className="w-[1px] h-6 bg-border mx-1 hidden sm:block" />
+
+          {/* Import from Database Action */}
           <button
-            onClick={handleAddCollection}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-surface hover:bg-surface-high border border-border text-xs font-bold text-text transition-all"
+            onClick={() => setShowConfirmImportModal(true)}
+            disabled={importing || !selectedDb}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface hover:bg-surface-high border border-border text-xs font-bold text-text transition-all disabled:opacity-50"
+            title="Inspect real MongoDB collections and infer representative document fields"
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Collection</span>
+            <Download className="w-3.5 h-3.5 text-secondary" />
+            <span>{importing ? 'Importing...' : 'Import from Database'}</span>
           </button>
 
+          {/* Apply Structure to Database Action */}
           <button
-            onClick={handleSaveModel}
-            disabled={saving}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-surface hover:bg-surface-high border border-border text-xs font-bold text-text transition-all"
-          >
-            <Save className="w-3.5 h-3.5" />
-            <span>{saving ? 'Saving...' : 'Save Model'}</span>
-          </button>
-
-          <button
-            onClick={handleGenerateStructure}
-            disabled={generating}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-primary hover:bg-primary-hover text-white text-xs font-bold shadow-md hover:scale-105 transition-all disabled:opacity-50"
+            onClick={handleApplyStructure}
+            disabled={applying || !selectedDb}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold shadow-sm hover:scale-[1.02] transition-all disabled:opacity-50"
+            title="Safely create missing collections in your real virtual database without altering existing data"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>{generating ? 'Generating...' : 'Generate MongoDB Structure'}</span>
+            <span>{applying ? 'Applying...' : 'Apply Structure to Database'}</span>
           </button>
+        </div>
+
+        {/* Database Context Indicator Banner */}
+        <div className="flex items-center justify-between flex-wrap gap-2 px-3 py-1.5 bg-primary/5 rounded-xl border border-primary/20 text-xs text-text-muted">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span className="font-bold text-text">
+              Linked Database: <span className="font-mono text-primary font-black">{selectedDbObj?.name || 'None'}</span>
+            </span>
+            <span className="text-[11px] font-mono bg-surface px-2 py-0.5 rounded-md border border-border">
+              {nodes.length} collections on canvas
+            </span>
+          </div>
+          <span className="text-[11px] text-text-muted">
+            MongoDB fields represent observed document properties, not rigid SQL columns.
+          </span>
         </div>
       </div>
 
@@ -694,6 +1193,7 @@ export default function ModelerPage() {
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
+                onEdgeClick={onEdgeClick}
                 nodeTypes={nodeTypes}
                 nodesDraggable={!isLocked}
                 nodesConnectable={!isLocked}
@@ -717,7 +1217,7 @@ export default function ModelerPage() {
               className="absolute top-4 left-4 z-10 bg-surface-elevated px-3.5 py-2 rounded-2xl border border-border text-[11px] font-mono shadow-sm flex items-center gap-2 text-text"
             >
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>Tip: Click collection to reveal resize handles, or drag corner / use S/M/L presets.</span>
+              <span>Tip: Click collection name to rename, click connection to toggle embed/ref, or drag corner to resize.</span>
             </div>
           </div>
         </div>
@@ -778,6 +1278,422 @@ export default function ModelerPage() {
           </div>
         </div>
       </div>
+
+      {/* ========================================================================= */}
+      {/* IN-APP MODAL DIALOGS (Replacing all browser prompt/confirm/alert)          */}
+      {/* ========================================================================= */}
+
+      {/* 1. Create Collection Modal */}
+      {showCreateColModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-surface rounded-2xl max-w-md w-full p-6 border border-border shadow-popover flex flex-col gap-4 text-text">
+            <div className="flex items-center justify-between pb-1 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Boxes className="w-5 h-5 text-primary" />
+                <h3 className="text-base font-bold">Add Collection Node</h3>
+              </div>
+              <button
+                onClick={() => setShowCreateColModal(false)}
+                className="text-text-muted hover:text-text p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-text-muted leading-relaxed">
+              Define a new MongoDB collection node for your schema diagram. Collection names will be stored in clean lowercase with underscores.
+            </p>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">
+                Collection Name
+              </label>
+              <input
+                type="text"
+                autoFocus
+                placeholder="e.g. products, enrollments, audit_logs"
+                value={newColName}
+                onChange={(e) => {
+                  setNewColName(e.target.value);
+                  setColNameError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleCreateCollectionSubmit();
+                  if (e.key === 'Escape') setShowCreateColModal(false);
+                }}
+                className="w-full px-3 py-2 text-xs rounded-xl bg-surface-low border border-border text-text focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              {colNameError && (
+                <span className="text-[11px] text-red-500 font-medium">{colNameError}</span>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowCreateColModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-text-muted hover:bg-surface-high"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateCollectionSubmit}
+                className="px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-hover shadow-sm"
+              >
+                Create Collection Node
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Rename Collection Modal */}
+      {showRenameColModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-surface rounded-2xl max-w-md w-full p-6 border border-border shadow-popover flex flex-col gap-4 text-text">
+            <div className="flex items-center justify-between pb-1 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Boxes className="w-5 h-5 text-primary" />
+                <h3 className="text-base font-bold">Rename Collection Node</h3>
+              </div>
+              <button
+                onClick={() => setShowRenameColModal(false)}
+                className="text-text-muted hover:text-text p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-primary/10 border border-primary/20 rounded-xl p-3 text-xs text-text-muted leading-relaxed flex items-start gap-2">
+              <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+              <span>
+                <strong>Design-Only Action:</strong> Renaming this collection node updates your model design only. It does not rename or alter your live MongoDB database.
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">
+                New Collection Name
+              </label>
+              <input
+                type="text"
+                autoFocus
+                placeholder="e.g. customers_v2"
+                value={renamingColName}
+                onChange={(e) => {
+                  setRenamingColName(e.target.value);
+                  setRenameError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleRenameCollectionSubmit();
+                  if (e.key === 'Escape') setShowRenameColModal(false);
+                }}
+                className="w-full px-3 py-2 text-xs rounded-xl bg-surface-low border border-border text-text focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              {renameError && (
+                <span className="text-[11px] text-red-500 font-medium">{renameError}</span>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowRenameColModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-text-muted hover:bg-surface-high"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleRenameCollectionSubmit}
+                className="px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-hover shadow-sm"
+              >
+                Rename Node
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Add Field Modal */}
+      {showAddFieldModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-surface rounded-2xl max-w-md w-full p-6 border border-border shadow-popover flex flex-col gap-4 text-text">
+            <div className="flex items-center justify-between pb-1 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Plus className="w-5 h-5 text-primary" />
+                <h3 className="text-base font-bold">
+                  Add Field to &quot;{String((targetNodeForField?.data as any)?.name || 'Collection')}&quot;
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowAddFieldModal(false)}
+                className="text-text-muted hover:text-text p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">
+                  Field Name
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="e.g. status, totalAmount, tags, address"
+                  value={newFieldName}
+                  onChange={(e) => {
+                    setNewFieldName(e.target.value);
+                    setFieldError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleAddFieldSubmit();
+                    if (e.key === 'Escape') setShowAddFieldModal(false);
+                  }}
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-surface-low border border-border text-text focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">
+                  BSON / Field Data Type
+                </label>
+                <select
+                  value={newFieldType}
+                  onChange={(e) => setNewFieldType(e.target.value as FieldDataType)}
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-surface-low border border-border text-text focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                >
+                  <option value="String">String (UTF-8 text)</option>
+                  <option value="Number">Number (Double / Int)</option>
+                  <option value="Boolean">Boolean (true / false)</option>
+                  <option value="Date">Date (ISODate timestamp)</option>
+                  <option value="ObjectId">ObjectId (MongoDB 12-byte identifier)</option>
+                  <option value="Array">Array (BSON list of items)</option>
+                  <option value="Object">Object (Embedded sub-document)</option>
+                  <option value="Decimal128">Decimal128 (High-precision currency)</option>
+                </select>
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer pt-1">
+                <input
+                  type="checkbox"
+                  checked={newFieldRequired}
+                  onChange={(e) => setNewFieldRequired(e.target.checked)}
+                  className="w-4 h-4 rounded text-primary focus:ring-primary"
+                />
+                <span className="text-xs font-medium text-text">
+                  Mark as Intended Required Field (Design Documentation)
+                </span>
+              </label>
+
+              {fieldError && (
+                <span className="text-[11px] text-red-500 font-medium">{fieldError}</span>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowAddFieldModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-text-muted hover:bg-surface-high"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleAddFieldSubmit}
+                className="px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-hover shadow-sm"
+              >
+                Add Field
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Confirm Import Modal */}
+      {showConfirmImportModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-surface rounded-2xl max-w-md w-full p-6 border border-border shadow-popover flex flex-col gap-4 text-text">
+            <div className="flex items-center justify-between pb-1 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Download className="w-5 h-5 text-secondary" />
+                <h3 className="text-base font-bold">Import from Real Database</h3>
+              </div>
+              <button
+                onClick={() => setShowConfirmImportModal(false)}
+                className="text-text-muted hover:text-text p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-2.5 text-xs text-text-muted leading-relaxed">
+              <p>
+                This will inspect your real MongoDB database{' '}
+                <strong className="text-text font-mono font-bold">
+                  &quot;{selectedDbObj?.name || 'Selected Database'}&quot;
+                </strong>
+                , analyze sample documents from each collection, and infer representative field names and types onto the canvas.
+              </p>
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-amber-700 dark:text-amber-400 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Notice:</strong> Importing will replace the entities currently on the canvas with the imported database structure. Any unsaved changes on the canvas will be overwritten.
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowConfirmImportModal(false)}
+                disabled={importing}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-text-muted hover:bg-surface-high"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmImport}
+                disabled={importing}
+                className="px-4 py-2 rounded-xl bg-secondary text-white text-xs font-bold hover:bg-secondary/90 shadow-sm flex items-center gap-1.5"
+              >
+                {importing ? (
+                  <span>Inspecting Database...</span>
+                ) : (
+                  <>
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Confirm Import</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Apply Structure Results Modal */}
+      {showApplyResultModal && applyResultData && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-surface rounded-2xl max-w-md w-full p-6 border border-border shadow-popover flex flex-col gap-4 text-text">
+            <div className="flex items-center justify-between pb-1 border-b border-border">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-emerald-500" />
+                <h3 className="text-base font-bold">Database Structure Applied</h3>
+              </div>
+              <button
+                onClick={() => setShowApplyResultModal(false)}
+                className="text-text-muted hover:text-text p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-3 text-xs leading-relaxed">
+              <p className="text-text-muted">
+                Applied safe, non-destructive structure changes to database{' '}
+                <strong className="text-text font-mono font-bold">
+                  &quot;{selectedDbObj?.name || 'Target Database'}&quot;
+                </strong>
+                .
+              </p>
+
+              {/* Created Collections */}
+              <div className="flex flex-col gap-1.5">
+                <span className="font-bold text-[11px] text-text-muted uppercase tracking-wider">
+                  Newly Created Collections ({applyResultData.createdCollections.length})
+                </span>
+                {applyResultData.createdCollections.length === 0 ? (
+                  <span className="text-[11px] text-text-muted italic bg-surface-low px-3 py-1.5 rounded-lg border border-border">
+                    No missing collections needed to be created.
+                  </span>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {applyResultData.createdCollections.map((c) => (
+                      <span
+                        key={c}
+                        className="flex items-center gap-1 font-mono text-[11px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-lg font-bold"
+                      >
+                        <Check className="w-3 h-3" />
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Existing Collections */}
+              <div className="flex flex-col gap-1.5">
+                <span className="font-bold text-[11px] text-text-muted uppercase tracking-wider">
+                  Existing Collections Preserved ({applyResultData.existingCollections.length})
+                </span>
+                {applyResultData.existingCollections.length === 0 ? (
+                  <span className="text-[11px] text-text-muted italic bg-surface-low px-3 py-1.5 rounded-lg border border-border">
+                    None
+                  </span>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {applyResultData.existingCollections.map((c) => (
+                      <span
+                        key={c}
+                        className="font-mono text-[11px] bg-surface-high text-text border border-border px-2 py-0.5 rounded-lg"
+                        title="Collection already existed; all documents were preserved untouched."
+                      >
+                        {c} <span className="text-text-muted font-sans text-[10px]">(data untouched)</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Skipped */}
+              {applyResultData.skippedEntities.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <span className="font-bold text-[11px] text-amber-500 uppercase tracking-wider">
+                    Skipped Entities ({applyResultData.skippedEntities.length})
+                  </span>
+                  <div className="flex flex-col gap-1">
+                    {applyResultData.skippedEntities.map((s, idx) => (
+                      <span key={idx} className="text-[11px] text-amber-600 dark:text-amber-400">
+                        • {s}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-emerald-700 dark:text-emerald-400 text-[11px] flex items-start gap-2">
+                <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Safe & Non-Destructive:</strong> MongoDB collections were safely verified. No live documents were dropped, altered, or overwritten.
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-border">
+              <Link
+                href={`/playground?databaseId=${selectedDb}`}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-high hover:bg-surface-elevated text-xs font-bold text-text transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5 text-primary" />
+                <span>Query in Playground</span>
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => setShowApplyResultModal(false)}
+                className="px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-hover shadow-sm"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

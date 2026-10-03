@@ -12,35 +12,46 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { navPosition } = useTheme();
   const [authChecked, setAuthChecked] = useState(false);
 
-  const isPublicPage = pathname === '/' || pathname === '/login' || pathname.startsWith('/forum');
+  const isStrictPublic = pathname === '/' || pathname === '/login';
+  const isForum = pathname.startsWith('/forum');
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
   useEffect(() => {
     // Listen for global 401 unauthorized events dispatched by API client
     const handleUnauthorized = () => {
-      router.push(`/login?from=${encodeURIComponent(pathname)}`);
+      setIsAuthenticated(false);
+      if (!isStrictPublic && !isForum) {
+        router.push(`/login?from=${encodeURIComponent(pathname)}`);
+      }
     };
     window.addEventListener('datachan_unauthorized', handleUnauthorized);
 
-    if (!isPublicPage) {
+    if (isStrictPublic) {
+      setAuthChecked(true);
+      setIsAuthenticated(false);
+    } else {
       // Validate session with authoritative backend
       api
         .getMe()
         .then(() => {
+          setIsAuthenticated(true);
           setAuthChecked(true);
         })
         .catch(() => {
-          router.push(`/login?from=${encodeURIComponent(pathname)}`);
+          setIsAuthenticated(false);
+          setAuthChecked(true);
+          if (!isForum) {
+            router.push(`/login?from=${encodeURIComponent(pathname)}`);
+          }
         });
-    } else {
-      setAuthChecked(true);
     }
 
     return () => {
       window.removeEventListener('datachan_unauthorized', handleUnauthorized);
     };
-  }, [pathname, isPublicPage, router]);
+  }, [pathname, isStrictPublic, isForum, router]);
 
-  if (isPublicPage) {
+  if (isStrictPublic) {
     return (
       <div className="min-h-screen w-full flex flex-col bg-background text-text">
         {children}
@@ -62,6 +73,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // Guest accessing forum: permit unauthenticated access without app dock
+  if (isForum && !isAuthenticated) {
+    return (
+      <div className="min-h-screen w-full flex flex-col bg-background text-text">
+        {children}
+      </div>
+    );
+  }
+
   // Padding classes depending on dock position
   const paddingClasses = {
     bottom: 'pt-4 sm:pt-6 pb-24 md:pb-28',
@@ -69,6 +89,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     left: 'pl-20 sm:pl-28 py-4 sm:py-6 pr-4',
     right: 'pr-20 sm:pr-28 py-4 sm:py-6 pl-4',
   };
+
+  // Authenticated forum access: retain TopCommandNav with full-width layout
+  if (isForum && isAuthenticated) {
+    return (
+      <div className="min-h-screen w-full flex flex-col justify-between bg-background text-text transition-colors">
+        <TopCommandNav />
+        <main
+          className={`w-full flex-1 flex flex-col transition-all ${
+            paddingClasses[navPosition] || paddingClasses.bottom
+          }`}
+        >
+          {children}
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen w-full flex flex-col justify-between p-2 sm:p-4 md:p-6 bg-background text-text transition-colors">

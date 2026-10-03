@@ -8,6 +8,7 @@ import {
   CollectionMetadata,
   QueryResult,
   QueryHistoryItem,
+  QuerySyntaxBreakdownItem,
 } from '@datachan/shared-types';
 import {
   Terminal,
@@ -33,6 +34,9 @@ export default function PlaygroundPage() {
   const [selectedDb, setSelectedDb] = useState<VirtualDatabase | null>(null);
   const [collections, setCollections] = useState<CollectionMetadata[]>([]);
   const [selectedCollection, setSelectedCollection] = useState<string>('students');
+  const [serverVersion, setServerVersion] = useState<string>('8.2.5');
+  const [liveBreakdown, setLiveBreakdown] = useState<QuerySyntaxBreakdownItem[]>([]);
+  const [syntaxHint, setSyntaxHint] = useState<string | null>(null);
   const [queryCode, setQueryCode] = useState<string>(
     '// Query: Find students older than 18, sort by GPA descending\n' +
       'db.students.find(\n' +
@@ -47,14 +51,20 @@ export default function PlaygroundPage() {
   const [viewTab, setViewTab] = useState<'json' | 'table'>('json');
   const [copySuccess, setCopySuccess] = useState(false);
 
-  // Load databases on mount
+  // Load databases and server status on mount
   useEffect(() => {
     async function loadDbs() {
       try {
-        const dbs = await api.listDatabases();
+        const [dbs, status] = await Promise.all([
+          api.listDatabases(),
+          api.getPlaygroundStatus().catch(() => null),
+        ]);
         setDatabases(dbs);
         if (dbs.length > 0) {
           setSelectedDb(dbs[0]);
+        }
+        if (status?.serverVersion) {
+          setServerVersion(status.serverVersion);
         }
         loadHistory();
       } catch (err) {
@@ -63,6 +73,33 @@ export default function PlaygroundPage() {
     }
     loadDbs();
   }, []);
+
+  // Debounced live syntax breakdown on query editor input (Requirement 3)
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      const code = queryCode.trim();
+      if (!code) {
+        setLiveBreakdown([]);
+        setSyntaxHint(null);
+        return;
+      }
+      try {
+        const res = await api.analyzePlaygroundQuery(
+          code,
+          selectedDb?.id || 'default',
+          selectedCollection
+        );
+        if (res.breakdown && res.breakdown.length > 0) {
+          setLiveBreakdown(res.breakdown);
+          setSyntaxHint(null);
+        } else if (res.error) {
+          setSyntaxHint(res.error);
+        }
+      } catch {}
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [queryCode, selectedDb?.id, selectedCollection]);
 
   // When selected database changes, fetch its collections
   useEffect(() => {
@@ -141,6 +178,12 @@ export default function PlaygroundPage() {
         queryCode.trim()
       );
       setQueryResult(res);
+      if (res.historyItem) {
+        setQueryHistory((prev) => [
+          res.historyItem!,
+          ...prev.filter((item) => item.id !== res.historyItem!.id),
+        ]);
+      }
       loadHistory();
     } catch (err: any) {
       setQueryError(err.message || 'Query execution failed');
@@ -217,7 +260,7 @@ export default function PlaygroundPage() {
           {/* Live Connection Capsule */}
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-tertiary-container/15 text-tertiary text-xs font-mono font-bold">
             <span className="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span>
-            <span>Sandbox Connected &bull; MongoDB 6.0</span>
+            <span>Sandbox Connected &bull; MongoDB {serverVersion}</span>
           </div>
         </div>
 
@@ -319,28 +362,42 @@ export default function PlaygroundPage() {
               </h3>
             </div>
 
-            {queryResult?.breakdown && queryResult.breakdown.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {queryResult.breakdown.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="bg-surface rounded-xl p-2.5 border border-border flex flex-col gap-1 text-xs"
-                  >
-                    <div className="flex items-center justify-between">
-                      <code className="font-mono font-bold text-primary text-[11px]">{item.token}</code>
-                      <span className="text-[10px] font-mono uppercase bg-primary-fixed text-primary px-1.5 py-0.2 rounded font-semibold">
-                        {item.category}
-                      </span>
-                    </div>
-                    <span className="text-[11px] text-text-muted">{item.description}</span>
+            {(() => {
+              const activeBreakdown = liveBreakdown.length > 0 ? liveBreakdown : (queryResult?.breakdown || []);
+              if (activeBreakdown.length > 0) {
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {activeBreakdown.map((item, idx) => (
+                      <div
+                        key={`${item.token}-${idx}`}
+                        className="bg-surface rounded-xl p-2.5 border border-border flex flex-col gap-1 text-xs"
+                      >
+                        <div className="flex items-center justify-between">
+                          <code className="font-mono font-bold text-primary text-[11px]">{item.token}</code>
+                          <span className="text-[10px] font-mono uppercase bg-primary-fixed text-primary px-1.5 py-0.2 rounded font-semibold">
+                            {item.category}
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-text-muted">{item.description}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-xs text-text-muted py-2 leading-relaxed">
-                Run an MQL operation to view an automated pedagogical breakdown of your targets, filters, projection masks, and aggregation pipeline stages.
-              </div>
-            )}
+                );
+              }
+              if (syntaxHint) {
+                return (
+                  <div className="p-3 rounded-xl bg-surface border border-border text-xs text-text-muted font-mono">
+                    <span className="text-primary font-semibold">Parser Note: </span>
+                    {syntaxHint}
+                  </div>
+                );
+              }
+              return (
+                <div className="text-xs text-text-muted py-2 leading-relaxed">
+                  Type or run an MQL operation to view an automated pedagogical breakdown of your targets, filters, projection masks, and aggregation pipeline stages.
+                </div>
+              );
+            })()}
           </div>
         </div>
 

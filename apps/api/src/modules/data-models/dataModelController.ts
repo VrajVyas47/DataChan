@@ -5,12 +5,32 @@ import {
   DataModel,
   DesignFeedbackItem,
   GeneratedMongoStructure,
+  ImportDatabaseResult,
+  ApplyStructureResult,
+  ModelEntity,
+  ModelField,
+  FieldDataType,
 } from '@datachan/shared-types';
 import {
   InvalidRequestError,
   ResourceNotFoundError,
   AuthorizationError,
 } from '../../errors';
+
+async function getAuthorizedDb(
+  databaseId: string,
+  userId: string
+): Promise<{ id: string; name: string; physicalNamespace: string }> {
+  const db = getPlatformDb();
+  const vdb = await db.collection('virtual_databases').findOne({ id: databaseId });
+  if (!vdb) {
+    throw new ResourceNotFoundError('Virtual Database', databaseId);
+  }
+  if (vdb.userId !== userId) {
+    throw new AuthorizationError('You do not have access to this virtual database');
+  }
+  return { id: vdb.id, name: vdb.name, physicalNamespace: vdb.physicalNamespace };
+}
 
 /**
  * Deterministic rule-based evaluation of a MongoDB data model.
@@ -127,15 +147,21 @@ export function validateDataModelRules(model: Partial<DataModel>): DesignFeedbac
 export async function listDataModels(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const db = getPlatformDb();
+    const query: any = { userId: req.user!.userId };
+    if (req.query.databaseId) {
+      query.databaseId = String(req.query.databaseId);
+    }
+
     const models = await db
       .collection('data_models')
-      .find({ userId: req.user!.userId })
+      .find(query)
       .sort({ updatedAt: -1 })
       .toArray();
 
     const formatted: DataModel[] = models.map((m: any) => ({
       id: m.id,
       userId: m.userId,
+      databaseId: m.databaseId,
       name: m.name,
       description: m.description,
       entities: m.entities || [],
@@ -171,6 +197,7 @@ export async function getDataModel(req: Request, res: Response, next: NextFuncti
     const formatted: DataModel = {
       id: model.id,
       userId: model.userId,
+      databaseId: model.databaseId,
       name: model.name,
       description: model.description,
       entities: model.entities || [],
@@ -192,22 +219,42 @@ export async function getDataModel(req: Request, res: Response, next: NextFuncti
 
 export async function saveOrUpdateDataModel(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { id, name, description, entities, relationships } = req.body;
+    const { id, databaseId, name, description, entities, relationships } = req.body;
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
       throw new InvalidRequestError('Model name is required');
     }
 
     const db = getPlatformDb();
-    const modelId = id || `dm_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+    // Verify authorized access to virtual database if databaseId is provided
+    if (databaseId) {
+      await getAuthorizedDb(String(databaseId), req.user!.userId);
+    }
+
+    let modelId = id;
+    let createdAt = new Date().toISOString();
+
+    if (id) {
+      const existing = await db.collection('data_models').findOne({ id });
+      if (existing) {
+        if (existing.userId !== req.user!.userId) {
+          throw new AuthorizationError('You do not own this data model');
+        }
+        createdAt = existing.createdAt || createdAt;
+      }
+    } else {
+      modelId = `dm_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    }
 
     const modelRecord: DataModel = {
       id: modelId,
       userId: req.user!.userId,
+      databaseId: databaseId ? String(databaseId) : undefined,
       name: name.trim(),
       description: description || '',
       entities: entities || [],
       relationships: relationships || [],
-      createdAt: new Date().toISOString(),
+      createdAt,
       updatedAt: new Date().toISOString(),
     };
 
@@ -258,6 +305,9 @@ export async function generateMongoStructure(
 
     if (!model) {
       throw new ResourceNotFoundError('Data Model', id);
+    }
+    if (model.userId !== req.user!.userId) {
+      throw new AuthorizationError('You do not own this data model');
     }
 
     const user = await platformDb.collection('users').findOne({ id: req.user!.userId });
@@ -334,3 +384,211 @@ export async function generateMongoStructure(
     next(err);
   }
 }
+
+/**
+ * Import real MongoDB collections and infer representative document fields from an authorized virtual database.
+ */
+export async function importDatabaseStructure(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const { databaseId } = req.body;
+    if (!databaseId || typeof databaseId !== 'string') {
+      throw new InvalidRequestError('databaseId is required to import database structure');
+    }
+
+    const vdb = await getAuthorizedDb(databaseId, req.user!.userId);
+    const client = getMongoClient();
+    const userDb = client.db(vdb.physicalNamespace);
+
+    const rawCols = await userDb.listCollections().toArray();
+    const cols = rawCols.filter((c) => !c.name.startsWith('system.'));
+
+    const entities: ModelEntity[] = [];
+
+    for (let i = 0; i < cols.length; i++) {
+      const col = cols[i];
+      let samples: any[] = [];
+      try {
+        samples = await userDb.collection(col.name).find().limit(25).toArray();
+      } catch {
+        samples = [];
+      }
+
+      const fieldMap = new Map<string, { types: Set<string>; count: number }>();
+      for (const doc of samples) {
+        for (const [key, val] of Object.entries(doc)) {
+          if (!fieldMap.has(key)) {
+            fieldMap.set(key, { types: new Set<string>(), count: 0 });
+          }
+          const entry = fieldMap.get(key)!;
+          entry.count++;
+
+          if (val === null || val === undefined) {
+            // Null or undefined
+          } else if (Array.isArray(val)) {
+            entry.types.add('Array');
+          } else if (
+            (val as any)._bsontype === 'ObjectId' ||
+            (typeof val === 'object' && typeof (val as any).toHexString === 'function')
+          ) {
+            entry.types.add('ObjectId');
+          } else if (typeof val === 'number') {
+            entry.types.add('Number');
+          } else if (typeof val === 'boolean') {
+            entry.types.add('Boolean');
+          } else if (val instanceof Date) {
+            entry.types.add('Date');
+          } else if (typeof val === 'object') {
+            entry.types.add('Object');
+          } else {
+            entry.types.add('String');
+          }
+        }
+      }
+
+      const fields: ModelField[] = [];
+      // Primary _id is always present
+      fields.push({
+        id: `f_${col.name}__id`,
+        name: '_id',
+        type: 'ObjectId',
+        isRequired: true,
+      });
+
+      for (const [fieldName, meta] of fieldMap.entries()) {
+        if (fieldName === '_id') continue;
+
+        let resolvedType: FieldDataType = 'String';
+        if (meta.types.has('Array')) resolvedType = 'Array';
+        else if (meta.types.has('Object')) resolvedType = 'Object';
+        else if (meta.types.has('ObjectId')) resolvedType = 'ObjectId';
+        else if (meta.types.has('Number')) resolvedType = 'Number';
+        else if (meta.types.has('Boolean')) resolvedType = 'Boolean';
+        else if (meta.types.has('Date')) resolvedType = 'Date';
+
+        fields.push({
+          id: `f_${col.name}_${fieldName}`,
+          name: fieldName,
+          type: resolvedType,
+          isRequired: samples.length > 0 && meta.count === samples.length,
+        });
+      }
+
+      entities.push({
+        id: `node_${col.name}_${Math.random().toString(36).substring(2, 7)}`,
+        name: col.name,
+        width: 320,
+        position: {
+          x: 50 + (i % 3) * 360,
+          y: 50 + Math.floor(i / 3) * 280,
+        },
+        fields,
+      });
+    }
+
+    const response: ApiResponse<ImportDatabaseResult> = {
+      success: true,
+      data: {
+        databaseId: vdb.id,
+        entities,
+        collectionsCount: cols.length,
+      },
+      error: null,
+    };
+    res.json(response);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Safe, non-destructive application of model structure to the real virtual database.
+ * Only creates missing collections; never drops collections, alters live schemas, or destroys documents.
+ */
+export async function applyStructureToDatabase(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const { databaseId, entities, modelId } = req.body;
+    if (!databaseId || typeof databaseId !== 'string') {
+      throw new InvalidRequestError('databaseId is required to apply structure');
+    }
+
+    const vdb = await getAuthorizedDb(databaseId, req.user!.userId);
+    const db = getPlatformDb();
+
+    let targetEntities: ModelEntity[] = [];
+    if (Array.isArray(entities)) {
+      targetEntities = entities;
+    } else if (modelId) {
+      const savedModel = await db.collection('data_models').findOne({ id: String(modelId) });
+      if (!savedModel) {
+        throw new ResourceNotFoundError('Data Model', String(modelId));
+      }
+      if (savedModel.userId !== req.user!.userId) {
+        throw new AuthorizationError('You do not own this data model');
+      }
+      targetEntities = savedModel.entities || [];
+    } else {
+      throw new InvalidRequestError('entities array or modelId is required');
+    }
+
+    const client = getMongoClient();
+    const userDb = client.db(vdb.physicalNamespace);
+
+    const existingList = await userDb.listCollections().toArray();
+    const existingNames = new Set(existingList.map((c) => c.name));
+
+    const createdCollections: string[] = [];
+    const existingCollections: string[] = [];
+    const skippedEntities: string[] = [];
+
+    for (const ent of targetEntities) {
+      if (!ent.name || typeof ent.name !== 'string' || ent.name.trim().length === 0) {
+        skippedEntities.push('Unnamed entity node');
+        continue;
+      }
+
+      const cleanName = ent.name.trim().toLowerCase().replace(/\s+/g, '_');
+      // Validate MongoDB collection naming rules
+      if (!cleanName || cleanName.includes('$') || cleanName.startsWith('system.') || cleanName.length > 120) {
+        skippedEntities.push(`${ent.name} (Invalid collection name)`);
+        continue;
+      }
+
+      if (existingNames.has(cleanName)) {
+        if (!existingCollections.includes(cleanName)) {
+          existingCollections.push(cleanName);
+        }
+      } else {
+        try {
+          await userDb.createCollection(cleanName);
+          createdCollections.push(cleanName);
+          existingNames.add(cleanName);
+        } catch (err: any) {
+          skippedEntities.push(`${cleanName}: ${err.message}`);
+        }
+      }
+    }
+
+    const response: ApiResponse<ApplyStructureResult> = {
+      success: true,
+      data: {
+        databaseId: vdb.id,
+        createdCollections,
+        existingCollections,
+        skippedEntities,
+      },
+      error: null,
+    };
+    res.json(response);
+  } catch (err) {
+    next(err);
+  }
+}
+

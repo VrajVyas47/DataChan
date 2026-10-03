@@ -8,6 +8,10 @@
     "build": "tsc -b",
     "start": "node dist/server.js",
     "bootstrap:admin": "tsx src/scripts/bootstrapAdmin.ts",
+    "schema:init": "tsx src/scripts/initSchema.ts",
+    "seed:dev-roles": "tsx src/scripts/seedDevRoles.ts",
+    "seed:dev-data": "tsx src/scripts/seedDevData.ts",
+    "reset:dev": "tsx src/scripts/resetDevData.ts",
     "test": "vitest run"
   },
   "dependencies": {

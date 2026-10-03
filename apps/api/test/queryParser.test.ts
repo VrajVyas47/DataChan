@@ -57,4 +57,21 @@ describe('Safe MQL AST Query Parser', () => {
     const malicious = 'db.students.find({ secret: process.env.SECRET })';
     expect(() => parseMqlQuery(malicious, 'test_db')).toThrow(/disallowed|forbidden/i);
   });
+
+  it('allows single statements with optional semicolons', () => {
+    const singleWithSemicolon = 'db.students.find({ age: 20 });';
+    const { normalized } = parseMqlQuery(singleWithSemicolon, 'test_db');
+    expect(normalized.operation).toBe('find');
+
+    const singleWithTrailingSemicolons = 'db.students.find({ age: 20 });;';
+    const res2 = parseMqlQuery(singleWithTrailingSemicolons, 'test_db');
+    expect(res2.normalized.operation).toBe('find');
+  });
+
+  it('strictly rejects multi-statement queries without partial execution', () => {
+    const multi = 'db.students.insertOne({ name: "Hacker" }); db.students.find({});';
+    expect(() => parseMqlQuery(multi, 'test_db')).toThrow(
+      'Multiple statements are not supported. Run one MongoDB operation at a time.'
+    );
+  });
 });

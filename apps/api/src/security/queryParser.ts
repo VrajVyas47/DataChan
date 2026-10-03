@@ -127,11 +127,16 @@ export function parseMqlQuery(
     throw new InvalidQueryError(`Syntax error in MongoDB query: ${err.message}`);
   }
 
-  if (!ast.body || ast.body.length === 0) {
+  const statements = (ast.body || []).filter((node: any) => node.type !== 'EmptyStatement');
+  if (statements.length === 0) {
     throw new InvalidQueryError('Query contains no executable statements.');
   }
 
-  const statement = ast.body[0];
+  if (statements.length > 1) {
+    throw new InvalidQueryError('Multiple statements are not supported. Run one MongoDB operation at a time.');
+  }
+
+  const statement = statements[0];
   if (statement.type !== 'ExpressionStatement') {
     throw new InvalidQueryError('Query must be a single MongoDB method call (e.g., db.collection.find(...)).');
   }

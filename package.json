@@ -11,8 +11,15 @@
     "dev": "npm run dev --workspaces --if-present",
     "dev:api": "npm run dev --workspace=apps/api",
     "dev:web": "npm run dev --workspace=apps/web",
+    "emulator": "npx firebase-tools emulators:start --only auth --import=.firebase-emulator-data --export-on-exit",
+    "emulator:auth": "npx firebase-tools emulators:start --only auth --import=.firebase-emulator-data --export-on-exit",
+    "emulator:export": "npx firebase-tools emulators:export .firebase-emulator-data --force",
     "build": "npm run build --workspaces --if-present",
     "bootstrap:admin": "npm run bootstrap:admin --workspace=@datachan/api --",
+    "schema:init": "npm run schema:init --workspace=@datachan/api",
+    "seed:dev-roles": "npm run seed:dev-roles --workspace=@datachan/api",
+    "seed:dev-data": "npm run seed:dev-data --workspace=@datachan/api",
+    "reset:dev": "npm run reset:dev --workspace=@datachan/api --",
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present"
   },
@@ -26,5 +33,8 @@
     "typescript"
   ],
   "author": "Data-Chan Team",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "docx": "^9.8.1"
+  }
 }

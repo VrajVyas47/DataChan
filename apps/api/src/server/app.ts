@@ -12,6 +12,9 @@ import collectionRoutes from '../modules/collections/collectionRoutes';
 import documentRoutes from '../modules/documents/documentRoutes';
 import playgroundRoutes from '../modules/playground/playgroundRoutes';
 import queryHistoryRoutes from '../modules/query-history/queryHistoryRoutes';
+import coursesRoutes from '../modules/learning/coursesRoutes';
+import modulesRoutes from '../modules/learning/modulesRoutes';
+import sectionsRoutes from '../modules/learning/sectionsRoutes';
 import learningRoutes from '../modules/learning/learningRoutes';
 import challengeRoutes from '../modules/challenges/challengeRoutes';
 import dataModelRoutes from '../modules/data-models/dataModelRoutes';
@@ -126,7 +129,10 @@ export function createApp(): express.Application {
   v1.use('/databases', documentRoutes); // allows /databases/:id/collections/:name/documents
   v1.use('/playground', playgroundRoutes);
   v1.use('/query-history', queryHistoryRoutes);
+  v1.use('/courses', coursesRoutes);
+  v1.use('/modules', modulesRoutes);
   v1.use('/lessons', learningRoutes);
+  v1.use('/sections', sectionsRoutes);
   v1.use('/challenges', challengeRoutes);
   v1.use('/data-models', dataModelRoutes);
   v1.use('/forum', forumRoutes);

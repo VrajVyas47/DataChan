@@ -9,6 +9,7 @@ import {
   QueryHistoryItem,
   Lesson,
   Classroom,
+  CohortAssignment,
 } from '@datachan/shared-types';
 import {
   Database,
@@ -72,11 +73,18 @@ export default function DashboardPage() {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   // Faculty Assignment state
-  const [assignedPracticals, setAssignedPracticals] = useState<Record<string, boolean>>({
-    'lesson-1-mongodb-basics': true,
-    'lesson-2-databases-and-collections': true,
-  });
-  const [dispatchMsg, setDispatchMsg] = useState<string | null>(null);
+  const [selectedTeachingCohortId, setSelectedTeachingCohortId] = useState<string>('');
+  const [cohortAssignments, setCohortAssignments] = useState<CohortAssignment[]>([]);
+  const [loadingAssignments, setLoadingAssignments] = useState(false);
+  const [dispatchingLessonId, setDispatchingLessonId] = useState<string | null>(null);
+  const [unassigningId, setUnassigningId] = useState<string | null>(null);
+  const [dispatchFeedback, setDispatchFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Student Assignment delivery state
+  const [studentMyAssignments, setStudentMyAssignments] = useState<CohortAssignment[]>([]);
+  const [studentAssignmentModalCohort, setStudentAssignmentModalCohort] = useState<Classroom | null>(null);
+  const [studentCohortAssignments, setStudentCohortAssignments] = useState<CohortAssignment[]>([]);
+  const [loadingStudentAssignments, setLoadingStudentAssignments] = useState(false);
 
   // Admin states
   const [adminStats, setAdminStats] = useState<any | null>(null);
@@ -90,12 +98,13 @@ export default function DashboardPage() {
   useEffect(() => {
     async function loadDashboard() {
       try {
-        const [me, dbs, history, allLessons, myClassrooms] = await Promise.all([
+        const [me, dbs, history, allLessons, myClassrooms, myAssignments] = await Promise.all([
           api.getMe(),
           api.listDatabases(),
           api.getQueryHistory(6),
           api.listLessons(),
           api.listMyClassrooms().catch(() => ({ teaching: [], enrolled: [] })),
+          api.listMyCohortAssignments().catch(() => []),
         ]);
 
         setProfile(me);
@@ -110,9 +119,17 @@ export default function DashboardPage() {
         setRecentQueries(history);
         setLessons(allLessons);
         setClassrooms(myClassrooms);
+        setStudentMyAssignments(myAssignments);
 
-        // Preload admin stats if admin or faculty
-        if (me.role === 'admin' || me.role === 'faculty') {
+        // Preload faculty cohort assignments if teaching
+        if (myClassrooms.teaching && myClassrooms.teaching.length > 0) {
+          const firstCohortId = myClassrooms.teaching[0].id;
+          setSelectedTeachingCohortId(firstCohortId);
+          api.listCohortAssignments(firstCohortId).then(setCohortAssignments).catch(() => {});
+        }
+
+        // Preload admin stats only if authenticated user is admin
+        if (me.role === 'admin') {
           api.getAdminStats().then(setAdminStats).catch(() => {});
           api.listAdminUsers().then(setAdminUsers).catch(() => {});
         }
@@ -196,10 +213,83 @@ export default function DashboardPage() {
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
-  const handleDispatchPractical = (lessonId: string, lessonTitle: string) => {
-    setAssignedPracticals((prev) => ({ ...prev, [lessonId]: true }));
-    setDispatchMsg(`Practical "${lessonTitle}" dispatched to cohort syllabus!`);
-    setTimeout(() => setDispatchMsg(null), 3500);
+  const handleTeachingCohortChange = async (cohortId: string) => {
+    setSelectedTeachingCohortId(cohortId);
+    setDispatchFeedback(null);
+    setLoadingAssignments(true);
+    try {
+      const list = await api.listCohortAssignments(cohortId);
+      setCohortAssignments(list);
+    } catch (err: any) {
+      console.error('Failed to load assignments for cohort:', err);
+      setCohortAssignments([]);
+    } finally {
+      setLoadingAssignments(false);
+    }
+  };
+
+  const handleDispatchPractical = async (lessonId: string, lessonTitle: string) => {
+    if (!selectedTeachingCohortId) {
+      setDispatchFeedback({ type: 'error', text: 'Please select a teaching cohort first.' });
+      return;
+    }
+    setDispatchingLessonId(lessonId);
+    setDispatchFeedback(null);
+    try {
+      await api.createCohortAssignment(selectedTeachingCohortId, {
+        targetType: 'lesson',
+        targetId: lessonId,
+      });
+      const updated = await api.listCohortAssignments(selectedTeachingCohortId);
+      setCohortAssignments(updated);
+      setDispatchFeedback({
+        type: 'success',
+        text: `Lesson "${lessonTitle}" successfully dispatched to cohort syllabus!`,
+      });
+    } catch (err: any) {
+      setDispatchFeedback({
+        type: 'error',
+        text: err.message || 'Failed to dispatch lesson to cohort',
+      });
+    } finally {
+      setDispatchingLessonId(null);
+    }
+  };
+
+  const handleUnassignPractical = async (assignmentId: string, lessonTitle: string) => {
+    if (!selectedTeachingCohortId) return;
+    setUnassigningId(assignmentId);
+    setDispatchFeedback(null);
+    try {
+      await api.deleteCohortAssignment(selectedTeachingCohortId, assignmentId);
+      const updated = await api.listCohortAssignments(selectedTeachingCohortId);
+      setCohortAssignments(updated);
+      setDispatchFeedback({
+        type: 'success',
+        text: `Lesson "${lessonTitle}" unassigned from cohort syllabus.`,
+      });
+    } catch (err: any) {
+      setDispatchFeedback({
+        type: 'error',
+        text: err.message || 'Failed to unassign lesson',
+      });
+    } finally {
+      setUnassigningId(null);
+    }
+  };
+
+  const handleOpenCohortAssignments = async (cohort: Classroom) => {
+    setStudentAssignmentModalCohort(cohort);
+    setLoadingStudentAssignments(true);
+    try {
+      const list = await api.listCohortAssignments(cohort.id);
+      setStudentCohortAssignments(list);
+    } catch (err) {
+      console.error('Failed to load assignments:', err);
+      setStudentCohortAssignments([]);
+    } finally {
+      setLoadingStudentAssignments(false);
+    }
   };
 
   const handleCleanOrphans = async () => {
@@ -247,93 +337,106 @@ export default function DashboardPage() {
   const progressPercent = Math.min(100, Math.round((completedLessonsCount / (lessons.length || 1)) * 100));
   const nextLesson = lessons.find((l) => !l.completed) || lessons[0];
 
+  const effectiveView: 'student' | 'faculty' | 'admin' =
+    profile?.role === 'admin'
+      ? currentView
+      : profile?.role === 'faculty'
+      ? currentView === 'admin'
+        ? 'faculty'
+        : currentView
+      : 'student';
+
+  const canSwitchRoles = profile?.role === 'faculty' || profile?.role === 'admin';
+
   return (
     <div className="flex flex-col gap-6 w-full pb-10">
       {/* ========================================================================= */}
-      {/* 1. ROLE VIEW SELECTOR BAR (For instant persona switching & hackathon demo) */}
+      {/* 1. ROLE VIEW SELECTOR BAR (Only for Faculty and Admin users)              */}
       {/* ========================================================================= */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-3.5 bg-surface-low rounded-2xl border border-border">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
-            {profile?.role === 'faculty' ? (
-              <GraduationCap className="w-4 h-4" />
-            ) : profile?.role === 'admin' ? (
-              <Shield className="w-4 h-4" />
-            ) : (
-              <BookOpen className="w-4 h-4" />
-            )}
+      {canSwitchRoles && (
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-3.5 bg-surface-low rounded-2xl border border-border">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
+              {profile?.role === 'faculty' ? (
+                <GraduationCap className="w-4 h-4" />
+              ) : (
+                <Shield className="w-4 h-4" />
+              )}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-text-main">
+                  {profile?.displayName || profile?.username || 'User'}
+                </span>
+                <span
+                  className={`text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-full border ${
+                    profile?.role === 'faculty'
+                      ? 'bg-secondary/15 text-secondary border-secondary/30'
+                      : 'bg-error/15 text-error border-error/30'
+                  }`}
+                >
+                  Account Role: {profile?.role}
+                </span>
+              </div>
+              <p className="text-[11px] text-text-muted">
+                {profile?.role === 'admin'
+                  ? 'Switch console perspective between System Admin, Faculty Portal, and Student Lab'
+                  : 'Toggle between your Faculty Academic Console and the Student Lab view'}
+              </p>
+            </div>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-text-main">
-                {profile?.displayName || profile?.username || 'User'}
-              </span>
-              <span
-                className={`text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-full border ${
-                  profile?.role === 'faculty'
-                    ? 'bg-secondary/15 text-secondary border-secondary/30'
-                    : profile?.role === 'admin'
-                    ? 'bg-error/15 text-error border-error/30'
-                    : 'bg-primary/15 text-primary border-primary/30'
+
+          {/* View Switcher Pills */}
+          <div className="flex items-center bg-surface border border-border p-1 rounded-xl gap-1 self-start md:self-auto">
+            <button
+              onClick={() => setCurrentView('student')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                effectiveView === 'student'
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'text-text-muted hover:text-text-main'
+              }`}
+            >
+              <span>👨‍🎓 Student Lab</span>
+            </button>
+            <button
+              onClick={() => setCurrentView('faculty')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                effectiveView === 'faculty'
+                  ? 'bg-secondary text-white shadow-sm'
+                  : 'text-text-muted hover:text-text-main'
+              }`}
+            >
+              <span>🎓 Faculty Portal</span>
+              {classrooms.teaching.length > 0 && (
+                <span className="text-[10px] font-mono px-1.5 rounded-full bg-white/20">
+                  {classrooms.teaching.length}
+                </span>
+              )}
+            </button>
+            {profile?.role === 'admin' && (
+              <button
+                onClick={() => setCurrentView('admin')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                  effectiveView === 'admin'
+                    ? 'bg-error text-white shadow-sm'
+                    : 'text-text-muted hover:text-text-main'
                 }`}
               >
-                Account Role: {profile?.role || 'student'}
-              </span>
-            </div>
-            <p className="text-[11px] text-text-muted">
-              Select a specialized dashboard view below to preview role-based interfaces
-            </p>
+                <span>🛡️ Admin Telemetry</span>
+              </button>
+            )}
           </div>
         </div>
-
-        {/* View Switcher Pills */}
-        <div className="flex items-center bg-surface border border-border p-1 rounded-xl gap-1 self-start md:self-auto">
-          <button
-            onClick={() => setCurrentView('student')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
-              currentView === 'student'
-                ? 'bg-primary text-white shadow-sm'
-                : 'text-text-muted hover:text-text-main'
-            }`}
-          >
-            <span>👨‍🎓 Student Lab</span>
-          </button>
-          <button
-            onClick={() => setCurrentView('faculty')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
-              currentView === 'faculty'
-                ? 'bg-secondary text-white shadow-sm'
-                : 'text-text-muted hover:text-text-main'
-            }`}
-          >
-            <span>🎓 Faculty Portal</span>
-            {classrooms.teaching.length > 0 && (
-              <span className="text-[10px] font-mono px-1.5 rounded-full bg-white/20">
-                {classrooms.teaching.length}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setCurrentView('admin')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
-              currentView === 'admin'
-                ? 'bg-error text-white shadow-sm'
-                : 'text-text-muted hover:text-text-main'
-            }`}
-          >
-            <span>🛡️ Admin Telemetry</span>
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* ========================================================================= */}
-      {/* 2. CONDITIONAL VIEW RENDERING BASED ON CURRENT VIEW                       */}
+      {/* 2. CONDITIONAL VIEW RENDERING BASED ON AUTHORIZED VIEW                    */}
       {/* ========================================================================= */}
 
       {/* ------------------------------------------------------------------------- */}
       {/* VIEW A: STUDENT DASHBOARD                                                 */}
       {/* ------------------------------------------------------------------------- */}
-      {currentView === 'student' && (
+      {effectiveView === 'student' && (
         <div className="flex flex-col gap-6">
           {/* Top Welcome & Actions */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border">
@@ -464,6 +567,59 @@ export default function DashboardPage() {
 
               {/* Enrolled Academic Cohorts Section */}
               <div className="bg-surface-low rounded-2xl border border-border p-5 flex flex-col gap-4">
+                {/* Active Cohort Assignments Widget */}
+                {studentMyAssignments.length > 0 && (
+                  <div className="p-4 rounded-xl bg-surface border border-primary/20 flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <h3 className="text-xs font-bold text-text-main uppercase font-mono tracking-wider">
+                          Active Cohort Assignments ({studentMyAssignments.length})
+                        </h3>
+                      </div>
+                      <Link
+                        href="/learn?assignedOnly=true"
+                        className="text-xs font-bold text-primary hover:underline flex items-center gap-1"
+                      >
+                        <span>Open in Learn</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </Link>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {studentMyAssignments.slice(0, 4).map((asg) => (
+                        <div
+                          key={asg.id}
+                          className="p-3 rounded-lg bg-surface-high border border-border/80 flex flex-col justify-between gap-2 hover:border-primary/40 transition-all"
+                        >
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center justify-between text-[10px] font-mono">
+                              <span className="font-bold px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                                {asg.cohortCode || 'Cohort'}
+                              </span>
+                              <span className="font-bold text-emerald-500">Active</span>
+                            </div>
+                            <h4 className="text-xs font-bold text-text-main line-clamp-1">{asg.targetTitle || asg.targetId}</h4>
+                            <span className="text-[10px] text-text-muted font-mono">
+                              {asg.targetCategory || 'Curriculum'} &bull; +{asg.targetXpReward || 50} XP
+                            </span>
+                          </div>
+                          <div className="pt-2 border-t border-border/50 flex items-center justify-between">
+                            <span className="text-[10px] text-text-muted">Assigned Lesson</span>
+                            <Link
+                              href={`/learn?lessonId=${asg.targetId}`}
+                              className="text-xs font-bold text-secondary hover:underline flex items-center gap-1"
+                            >
+                              <span>Start Lesson</span>
+                              <ArrowRight className="w-3 h-3" />
+                            </Link>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
                     <GraduationCap className="w-5 h-5 text-primary" />
@@ -510,13 +666,13 @@ export default function DashboardPage() {
                           <span className="text-text-muted font-mono text-[11px]">
                             {cls.enrolledStudentIds?.length || 0} peers enrolled
                           </span>
-                          <Link
-                            href="/challenges"
+                          <button
+                            onClick={() => handleOpenCohortAssignments(cls)}
                             className="font-bold text-primary hover:underline flex items-center gap-1 text-[11px]"
                           >
                             <span>View Assignments</span>
                             <ArrowRight className="w-3 h-3" />
-                          </Link>
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -544,7 +700,7 @@ export default function DashboardPage() {
                   <div className="flex flex-col gap-2">
                     {recentQueries.map((q) => (
                       <div
-                        key={q.id}
+                        key={q.id || (q as any)._id || Math.random().toString()}
                         className="p-3 rounded-xl bg-surface border border-border flex items-center justify-between gap-4 text-xs font-mono"
                       >
                         <div className="flex items-center gap-3 overflow-hidden">
@@ -646,7 +802,7 @@ export default function DashboardPage() {
       {/* ------------------------------------------------------------------------- */}
       {/* VIEW B: FACULTY INSTRUCTOR PORTAL                                         */}
       {/* ------------------------------------------------------------------------- */}
-      {currentView === 'faculty' && (
+      {effectiveView === 'faculty' && (
         <div className="flex flex-col gap-6">
           {/* Faculty Header Banner */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border">
@@ -684,10 +840,21 @@ export default function DashboardPage() {
           </div>
 
           {/* Feedback banner */}
-          {dispatchMsg && (
-            <div className="p-3.5 rounded-xl bg-tertiary/15 border border-tertiary/30 text-tertiary text-xs font-bold flex items-center gap-2 animate-fadeIn">
-              <CheckCheck className="w-4 h-4" />
-              <span>{dispatchMsg}</span>
+          {dispatchFeedback && (
+            <div
+              className={`p-3.5 rounded-xl border text-xs font-bold flex items-center justify-between animate-fadeIn ${
+                dispatchFeedback.type === 'success'
+                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-500'
+                  : 'bg-error/15 border-error/30 text-error'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <CheckCheck className="w-4 h-4 shrink-0" />
+                <span>{dispatchFeedback.text}</span>
+              </div>
+              <button onClick={() => setDispatchFeedback(null)} className="opacity-70 hover:opacity-100">
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
           )}
 
@@ -713,8 +880,7 @@ export default function DashboardPage() {
               </div>
               <div className="mt-3">
                 <span className="text-2xl font-black text-text-main font-mono">
-                  {classrooms.teaching.reduce((acc, c) => acc + (c.enrolledStudentIds?.length || 0), 0) +
-                    (adminStats?.roles?.students || 2)}
+                  {classrooms.teaching.reduce((acc, c) => acc + (c.enrolledStudentIds?.length || 0), 0)}
                 </span>
                 <p className="text-[11px] text-text-muted mt-1">Enrolled across cohorts</p>
               </div>
@@ -726,7 +892,7 @@ export default function DashboardPage() {
                 <BookOpen className="w-4 h-4 text-tertiary" />
               </div>
               <div className="mt-3">
-                <span className="text-2xl font-black text-text-main font-mono">15</span>
+                <span className="text-2xl font-black text-text-main font-mono">{lessons.length || 0}</span>
                 <p className="text-[11px] text-text-muted mt-1">Curated MongoDB labs</p>
               </div>
             </div>
@@ -738,7 +904,7 @@ export default function DashboardPage() {
               </div>
               <div className="mt-3">
                 <span className="text-2xl font-black text-text-main font-mono">
-                  {adminStats?.overview?.totalQueries || 14}
+                  {adminStats?.overview?.totalQueries ?? 0}
                 </span>
                 <p className="text-[11px] text-text-muted mt-1">Telemetry AST executions</p>
               </div>
@@ -814,21 +980,57 @@ export default function DashboardPage() {
 
           {/* Curriculum Practical Assignment Matrix */}
           <div className="bg-surface-low rounded-2xl border border-border p-5 flex flex-col gap-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h2 className="text-base font-bold text-text-main">Curriculum Practical Assignment Matrix</h2>
                 <p className="text-xs text-text-muted">
                   Dispatch standardized MongoDB practicals to student laboratory cohorts with deterministic grading.
                 </p>
               </div>
-              <Link
-                href="/learn"
-                className="text-xs font-bold text-secondary hover:underline flex items-center gap-1"
-              >
-                <span>Preview All 15 Practicals</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </Link>
+
+              <div className="flex items-center gap-3">
+                {classrooms.teaching.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-text-muted font-bold font-mono">Cohort:</span>
+                    <select
+                      value={selectedTeachingCohortId}
+                      onChange={(e) => handleTeachingCohortChange(e.target.value)}
+                      className="bg-surface border border-border rounded-lg px-2.5 py-1 text-xs font-bold text-text-main focus:outline-none focus:border-secondary"
+                    >
+                      {classrooms.teaching.map((cls) => (
+                        <option key={cls.id} value={cls.id}>
+                          {cls.code} - {cls.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <Link
+                  href="/learn"
+                  className="text-xs font-bold text-secondary hover:underline flex items-center gap-1"
+                >
+                  <span>Preview All Practicals</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </Link>
+              </div>
             </div>
+
+            {/* Feedback message banner */}
+            {dispatchFeedback && (
+              <div
+                className={`p-3 rounded-xl text-xs font-bold flex items-center justify-between ${
+                  dispatchFeedback.type === 'success'
+                    ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-500'
+                    : 'bg-error/15 border border-error/30 text-error'
+                }`}
+              >
+                <span>{dispatchFeedback.text}</span>
+                <button onClick={() => setDispatchFeedback(null)} className="opacity-70 hover:opacity-100">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
@@ -843,8 +1045,23 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
-                  {lessons.slice(0, 6).map((lesson, idx) => {
-                    const isAssigned = !!assignedPracticals[lesson.id];
+                  {loadingAssignments ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-text-muted">
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="w-4 h-4 border-2 border-secondary border-t-transparent rounded-full animate-spin"></div>
+                          <span>Loading cohort syllabus state...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : lessons.slice(0, 8).map((lesson, idx) => {
+                    const currentAssignment = cohortAssignments.find(
+                      (a) => a.targetId === lesson.id && a.status === 'active'
+                    );
+                    const isAssigned = !!currentAssignment;
+                    const isDispatching = dispatchingLessonId === lesson.id;
+                    const isUnassigning = currentAssignment ? unassigningId === currentAssignment.id : false;
+
                     return (
                       <tr key={lesson.id} className="hover:bg-surface/50">
                         <td className="py-3 px-3 font-mono text-text-muted">{idx + 1}</td>
@@ -868,17 +1085,23 @@ export default function DashboardPage() {
                           )}
                         </td>
                         <td className="py-3 px-3 text-right">
-                          <button
-                            onClick={() => handleDispatchPractical(lesson.id, lesson.title)}
-                            disabled={isAssigned}
-                            className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all ${
-                              isAssigned
-                                ? 'opacity-50 cursor-not-allowed text-text-muted bg-surface-high'
-                                : 'bg-secondary hover:bg-secondary/90 text-white shadow-sm'
-                            }`}
-                          >
-                            {isAssigned ? 'Assigned' : 'Dispatch to Cohort'}
-                          </button>
+                          {isAssigned ? (
+                            <button
+                              onClick={() => handleUnassignPractical(currentAssignment.id, lesson.title)}
+                              disabled={isUnassigning}
+                              className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-error bg-error/10 hover:bg-error/20 border border-error/30 transition-all disabled:opacity-50"
+                            >
+                              {isUnassigning ? 'Unassigning...' : 'Unassign'}
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleDispatchPractical(lesson.id, lesson.title)}
+                              disabled={isDispatching || !selectedTeachingCohortId}
+                              className="px-3 py-1 rounded-lg text-[11px] font-bold bg-secondary hover:bg-secondary/90 text-white shadow-sm transition-all disabled:opacity-50"
+                            >
+                              {isDispatching ? 'Dispatching...' : 'Dispatch to Cohort'}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -893,7 +1116,7 @@ export default function DashboardPage() {
       {/* ------------------------------------------------------------------------- */}
       {/* VIEW C: PLATFORM ADMIN CONTROL CENTER                                     */}
       {/* ------------------------------------------------------------------------- */}
-      {currentView === 'admin' && (
+      {effectiveView === 'admin' && (
         <div className="flex flex-col gap-6">
           {/* Admin Header Banner */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border">
@@ -903,7 +1126,9 @@ export default function DashboardPage() {
                   Platform Control Center &bull; Infrastructure Telemetry
                 </span>
                 <span className="text-text-muted text-xs">&bull;</span>
-                <span className="text-xs text-text-muted font-medium">Cluster: Localhost (WiredTiger 8.2)</span>
+                <span className="text-xs text-text-muted font-medium">
+                  Cluster: Localhost ({adminStats?.system?.version ? `MongoDB ${adminStats.system.version} WiredTiger` : 'MongoDB 8.2 WiredTiger'})
+                </span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-text-main mt-0.5">
                 System Administration &amp; Telemetry Portal
@@ -948,7 +1173,7 @@ export default function DashboardPage() {
               </div>
               <div className="mt-3">
                 <span className="text-2xl font-black text-text-main font-mono">
-                  {adminStats?.overview?.totalUsers || adminUsers.length || 11}
+                  {adminStats?.overview?.totalUsers ?? adminUsers.length ?? 0}
                 </span>
                 <p className="text-[11px] text-text-muted mt-1">Platform user accounts</p>
               </div>
@@ -961,7 +1186,7 @@ export default function DashboardPage() {
               </div>
               <div className="mt-3">
                 <span className="text-2xl font-black text-text-main font-mono">
-                  {adminStats?.overview?.totalDatabases || databases.length || 9}
+                  {adminStats?.overview?.totalDatabases ?? databases.length ?? 0}
                 </span>
                 <p className="text-[11px] text-text-muted mt-1">Isolated namespaces</p>
               </div>
@@ -974,7 +1199,7 @@ export default function DashboardPage() {
               </div>
               <div className="mt-3">
                 <span className="text-2xl font-black text-text-main font-mono">
-                  {adminStats?.overview?.totalQueries || 14}
+                  {adminStats?.overview?.totalQueries ?? 0}
                 </span>
                 <p className="text-[11px] text-text-muted mt-1">Global AST executions</p>
               </div>
@@ -987,7 +1212,9 @@ export default function DashboardPage() {
               </div>
               <div className="mt-3">
                 <span className="text-2xl font-black text-tertiary font-mono">HEALTHY</span>
-                <p className="text-[11px] text-text-muted mt-1">MongoDB 8.2 WiredTiger</p>
+                <p className="text-[11px] text-text-muted mt-1">
+                  {adminStats?.system?.version ? `MongoDB ${adminStats.system.version} WiredTiger` : 'MongoDB 8.2 WiredTiger'}
+                </p>
               </div>
             </div>
           </div>
@@ -1306,6 +1533,102 @@ export default function DashboardPage() {
                 className="px-4 py-2 rounded-full bg-surface-high hover:bg-surface-low text-text-main text-xs font-bold border border-border"
               >
                 Close Roster
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 4: VIEW ENROLLED COHORT ASSIGNMENTS (STUDENT DELIVERY)              */}
+      {/* ========================================================================= */}
+      {studentAssignmentModalCohort && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-2xl bg-surface-elevated rounded-3xl border border-border p-6 shadow-2xl flex flex-col gap-4 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-border">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                    {studentAssignmentModalCohort.code}
+                  </span>
+                  <h3 className="text-base font-bold text-text-main">{studentAssignmentModalCohort.name}</h3>
+                </div>
+                <p className="text-xs text-text-muted mt-1">
+                  Instructor: {studentAssignmentModalCohort.facultyName || 'Faculty'} &bull; Assigned Academic Curriculum
+                </p>
+              </div>
+              <button
+                onClick={() => setStudentAssignmentModalCohort(null)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-text-muted hover:text-text-main hover:bg-surface"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {loadingStudentAssignments ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-2">
+                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                <span className="text-xs text-text-muted">Loading assigned curriculum...</span>
+              </div>
+            ) : studentCohortAssignments.length === 0 ? (
+              <div className="py-10 text-center text-xs text-text-muted border border-dashed border-border rounded-xl flex flex-col items-center gap-2">
+                <BookOpen className="w-8 h-8 text-text-muted/50" />
+                <span>No curriculum assignments currently dispatched for this cohort.</span>
+                <span className="text-[11px] text-text-muted/80">Check back after your instructor assigns practical lessons.</span>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                <div className="text-[11px] font-mono uppercase text-text-muted tracking-wider">
+                  Active Syllabus Assignments ({studentCohortAssignments.length})
+                </div>
+                {studentCohortAssignments.map((asg) => (
+                  <div
+                    key={asg.id}
+                    className="p-4 rounded-2xl bg-surface border border-border/80 hover:border-primary/40 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                  >
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                          Active
+                        </span>
+                        <span className="text-xs font-mono text-text-muted uppercase">
+                          {asg.targetType} &bull; {asg.targetCategory || 'Curriculum'}
+                        </span>
+                      </div>
+                      <h4 className="text-sm font-bold text-text-main">
+                        {asg.targetTitle || asg.targetId}
+                      </h4>
+                      {asg.targetDescription && (
+                        <p className="text-xs text-text-muted line-clamp-1">{asg.targetDescription}</p>
+                      )}
+                      <div className="flex items-center gap-3 text-[11px] font-mono text-text-muted mt-1">
+                        <span>Assigned to: <strong className="text-primary">{asg.cohortCode || studentAssignmentModalCohort.code}</strong></span>
+                        {asg.targetXpReward ? (
+                          <span className="text-secondary font-bold">+{asg.targetXpReward} XP</span>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 flex items-center">
+                      <Link
+                        href={asg.targetType === 'lesson' ? `/learn?lessonId=${asg.targetId}` : `/challenges?id=${asg.targetId}`}
+                        className="px-4 py-2 rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-bold shadow-sm transition-all flex items-center gap-1.5"
+                      >
+                        <span>Open in Lab</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="pt-2 border-t border-border flex justify-end">
+              <button
+                onClick={() => setStudentAssignmentModalCohort(null)}
+                className="px-4 py-2 rounded-full bg-surface-high hover:bg-surface-low text-text-main text-xs font-bold border border-border"
+              >
+                Close
               </button>
             </div>
           </div>

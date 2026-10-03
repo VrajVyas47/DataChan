@@ -8,6 +8,9 @@ import * as auditModule from '../src/security/audit';
 import { config } from '../src/config';
 import * as adminController from '../src/modules/admin/adminController';
 import * as authController from '../src/modules/auth/authController';
+import * as classroomController from '../src/modules/classrooms/classroomController';
+import * as databaseController from '../src/modules/databases/databaseController';
+import * as workspaceController from '../src/modules/workspaces/workspaceController';
 
 // Mock dependencies
 vi.mock('../src/security/audit', () => ({
@@ -962,6 +965,283 @@ describe('Comprehensive Security Test Suite', () => {
           process.env.GOOGLE_APPLICATION_CREDENTIALS = originalGoogleAppCreds;
         }
       }
+    });
+  });
+
+  describe('7. Strict Student Authorization Boundary & Privileged Operation Rejection Suite', () => {
+    const studentUser = {
+      userId: 'usr_student_alpha',
+      firebaseUid: 'fb_student_alpha',
+      email: 'student.alpha@datachan.org',
+      username: 'student_alpha',
+      role: 'student' as const,
+      status: 'active' as const,
+    };
+
+    const victimUser = {
+      userId: 'usr_victim_beta',
+      firebaseUid: 'fb_victim_beta',
+      email: 'victim.beta@datachan.org',
+      username: 'victim_beta',
+      role: 'student' as const,
+      status: 'active' as const,
+    };
+
+    it('rejects student attempting to create a classroom cohort via requireRole (403)', async () => {
+      const req = {
+        user: studentUser,
+        originalUrl: '/api/v1/classrooms',
+        ip: '127.0.0.1',
+      } as unknown as Request;
+      const res = {} as Response;
+      const next = vi.fn();
+
+      const middleware = requireRole('faculty', 'admin');
+      await middleware(req, res, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      const err = next.mock.calls[0][0];
+      expect(err).toBeInstanceOf(AuthorizationError);
+      expect(err.statusCode).toBe(403);
+      expect(err.message).toContain('Required role: [faculty, admin]');
+    });
+
+    it('rejects student attempting to view cohort roster via requireRole (403)', async () => {
+      const req = {
+        user: studentUser,
+        originalUrl: '/api/v1/classrooms/cls_cs101/roster',
+        ip: '127.0.0.1',
+      } as unknown as Request;
+      const res = {} as Response;
+      const next = vi.fn();
+
+      const middleware = requireRole('faculty', 'admin');
+      await middleware(req, res, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      const err = next.mock.calls[0][0];
+      expect(err).toBeInstanceOf(AuthorizationError);
+      expect(err.statusCode).toBe(403);
+    });
+
+    it('rejects student in createClassroom controller even if middleware is bypassed (defense-in-depth)', async () => {
+      const req = {
+        user: studentUser,
+        body: { name: 'CS-404 Exploits' },
+      } as Request;
+      const res = {} as Response;
+      const next = vi.fn();
+
+      await classroomController.createClassroom(req, res, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      const err = next.mock.calls[0][0];
+      expect(err).toBeInstanceOf(AuthorizationError);
+      expect(err.statusCode).toBe(403);
+      expect(err.message).toContain('Only Faculty or Administrative instructors can create classroom cohorts');
+    });
+
+    it('rejects student in getClassroomRoster controller for unauthorized cohort', async () => {
+      const mockClassroom = {
+        id: 'cls_cs101',
+        facultyId: 'usr_faculty_gamma',
+        enrolledStudentIds: [studentUser.userId],
+      };
+      mockResourcesCollection.findOne.mockResolvedValue(mockClassroom);
+
+      const req = {
+        user: studentUser,
+        params: { id: 'cls_cs101' },
+      } as unknown as Request;
+      const res = {} as Response;
+      const next = vi.fn();
+
+      await classroomController.getClassroomRoster(req, res, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      const err = next.mock.calls[0][0];
+      expect(err).toBeInstanceOf(AuthorizationError);
+      expect(err.statusCode).toBe(403);
+      expect(err.message).toContain('Only the assigned faculty instructor or administrator can view this cohort roster');
+    });
+
+    it('rejects student attempting to access admin telemetry (GET /admin/stats) via requireRole (403)', async () => {
+      const req = {
+        user: studentUser,
+        originalUrl: '/api/v1/admin/stats',
+        ip: '127.0.0.1',
+      } as unknown as Request;
+      const res = {} as Response;
+      const next = vi.fn();
+
+      const middleware = requireRole('admin');
+      await middleware(req, res, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      const err = next.mock.calls[0][0];
+      expect(err).toBeInstanceOf(AuthorizationError);
+      expect(err.statusCode).toBe(403);
+    });
+
+    it('rejects student attempting role escalation (PATCH /admin/users/:userId/role) via requireRole (403)', async () => {
+      const req = {
+        user: studentUser,
+        originalUrl: `/api/v1/admin/users/${studentUser.userId}/role`,
+        ip: '127.0.0.1',
+      } as unknown as Request;
+      const res = {} as Response;
+      const next = vi.fn();
+
+      const middleware = requireRole('admin');
+      await middleware(req, res, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      const err = next.mock.calls[0][0];
+      expect(err).toBeInstanceOf(AuthorizationError);
+      expect(err.statusCode).toBe(403);
+    });
+
+    it('rejects student attempting maintenance purge (POST /admin/maintenance/clean-orphans) via requireRole (403)', async () => {
+      const req = {
+        user: studentUser,
+        originalUrl: '/api/v1/admin/maintenance/clean-orphans',
+        ip: '127.0.0.1',
+      } as unknown as Request;
+      const res = {} as Response;
+      const next = vi.fn();
+
+      const middleware = requireRole('admin');
+      await middleware(req, res, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      const err = next.mock.calls[0][0];
+      expect(err).toBeInstanceOf(AuthorizationError);
+      expect(err.statusCode).toBe(403);
+    });
+
+    it('rejects student attempting to access another user\'s virtual database (403)', async () => {
+      mockResourcesCollection.findOne.mockResolvedValue({
+        id: 'vdb_victim',
+        userId: victimUser.userId,
+        name: 'Victim DB',
+        physicalNamespace: 'db_victim_123',
+      });
+
+      const req = {
+        user: studentUser,
+        params: { id: 'vdb_victim' },
+      } as unknown as Request;
+      const res = {} as Response;
+      const next = vi.fn();
+
+      await databaseController.getDatabase(req, res, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      const err = next.mock.calls[0][0];
+      expect(err).toBeInstanceOf(AuthorizationError);
+      expect(err.statusCode).toBe(403);
+      expect(err.message).toContain('You do not own this database');
+    });
+
+    it('rejects student attempting to delete another user\'s virtual database (403)', async () => {
+      mockResourcesCollection.findOne.mockResolvedValue({
+        id: 'vdb_victim',
+        userId: victimUser.userId,
+        name: 'Victim DB',
+        physicalNamespace: 'db_victim_123',
+      });
+
+      const req = {
+        user: studentUser,
+        params: { id: 'vdb_victim' },
+      } as unknown as Request;
+      const res = {} as Response;
+      const next = vi.fn();
+
+      await databaseController.deleteDatabase(req, res, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      const err = next.mock.calls[0][0];
+      expect(err).toBeInstanceOf(AuthorizationError);
+      expect(err.statusCode).toBe(403);
+      expect(err.message).toContain('You do not own this database');
+    });
+
+    it('rejects student attempting to access another user\'s workspace (403)', async () => {
+      mockResourcesCollection.findOne.mockResolvedValue({
+        id: 'ws_victim',
+        userId: victimUser.userId,
+        name: 'Victim Workspace',
+      });
+
+      const req = {
+        user: studentUser,
+        params: { id: 'ws_victim' },
+      } as unknown as Request;
+      const res = {} as Response;
+      const next = vi.fn();
+
+      await workspaceController.getWorkspace(req, res, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      const err = next.mock.calls[0][0];
+      expect(err).toBeInstanceOf(AuthorizationError);
+      expect(err.statusCode).toBe(403);
+      expect(err.message).toContain('You do not own this workspace');
+    });
+
+    it('rejects student attempting to delete another user\'s workspace (403)', async () => {
+      mockResourcesCollection.findOne.mockResolvedValue({
+        id: 'ws_victim',
+        userId: victimUser.userId,
+        name: 'Victim Workspace',
+      });
+
+      const req = {
+        user: studentUser,
+        params: { id: 'ws_victim' },
+      } as unknown as Request;
+      const res = {} as Response;
+      const next = vi.fn();
+
+      await workspaceController.deleteWorkspace(req, res, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      const err = next.mock.calls[0][0];
+      expect(err).toBeInstanceOf(AuthorizationError);
+      expect(err.statusCode).toBe(403);
+      expect(err.message).toContain('You do not own this workspace');
+    });
+
+    it('ignores client-supplied role in syncUser and does not escalate student privilege', async () => {
+      const req = {
+        user: studentUser,
+        body: {
+          role: 'admin',
+          displayName: 'Updated Student Name',
+          themePreference: 'cyber-emerald',
+        },
+      } as Request;
+      const res = {
+        json: vi.fn(),
+      } as unknown as Response;
+      const next = vi.fn();
+
+      mockUsersCollection.findOne.mockResolvedValue({
+        ...studentUser,
+        displayName: 'Updated Student Name',
+        themePreference: 'cyber-emerald',
+      });
+
+      await authController.syncUser(req, res, next);
+
+      expect(mockUsersCollection.updateOne).toHaveBeenCalledWith(
+        { id: studentUser.userId },
+        expect.objectContaining({
+          $set: expect.not.objectContaining({ role: 'admin' }),
+        })
+      );
+      expect(res.json).toHaveBeenCalled();
     });
   });
 });

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { getPlatformDb, getMongoClient } from '../../database/mongoClient';
+import { getPlatformDb, getMongoClient, getMongoServerVersion } from '../../database/mongoClient';
 import {
   ApiResponse,
   QueryResult,
@@ -125,6 +125,12 @@ export async function executeQuery(req: Request, res: Response, next: NextFuncti
 
       case 'insertOne': {
         const doc = queryToRun.document || {};
+        const docBytes = Buffer.byteLength(JSON.stringify(doc));
+        if (docBytes > config.sandbox.maxDocumentSizeBytes) {
+          throw new InvalidRequestError(
+            `Document size (${docBytes} bytes) exceeds sandbox limit of ${config.sandbox.maxDocumentSizeBytes} bytes`
+          );
+        }
         const insertRes = await col.insertOne(doc);
         resultData = {
           acknowledged: insertRes.acknowledged,
@@ -139,6 +145,14 @@ export async function executeQuery(req: Request, res: Response, next: NextFuncti
         const docs = queryToRun.documents || [];
         if (docs.length > 50) {
           throw new InvalidRequestError('insertMany in sandbox allows maximum 50 documents per call.');
+        }
+        for (const doc of docs) {
+          const docBytes = Buffer.byteLength(JSON.stringify(doc));
+          if (docBytes > config.sandbox.maxDocumentSizeBytes) {
+            throw new InvalidRequestError(
+              `Document size (${docBytes} bytes) in insertMany exceeds sandbox limit of ${config.sandbox.maxDocumentSizeBytes} bytes`
+            );
+          }
         }
         const insertRes = await col.insertMany(docs);
         resultData = {
@@ -230,21 +244,33 @@ export async function executeQuery(req: Request, res: Response, next: NextFuncti
       isTruncated: documentsCount >= maxResults,
     };
 
-    // Asynchronously record query history (Section 13)
+    // Record query history (Section 13)
+    const nowIso = new Date().toISOString();
     const historyId = `qh_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    platformDb.collection('query_history').insertOne({
+    const historyDoc = {
       id: historyId,
       userId: req.user!.userId,
       workspaceId: vdb.workspaceId,
       databaseId: vdb.id,
       collection: collectionName,
+      collectionName,
       rawQuery: rawQuery || JSON.stringify(queryToRun),
       operation: queryToRun.operation,
+      executionTimeMs: durationMs,
       durationMs,
       documentsReturned: documentsCount,
+      documentsCount,
+      documentsAffected,
+      status: 'success' as const,
       success: true,
-      timestamp: new Date().toISOString(),
-    }).catch(() => {});
+      createdAt: nowIso,
+      timestamp: nowIso,
+      executedAt: nowIso,
+    };
+
+    await platformDb.collection('query_history').insertOne(historyDoc).catch((err) => {
+      console.error('[playground] Failed to record query history:', err.message);
+    });
 
     // Update user queries count
     platformDb.collection('users').updateOne(
@@ -258,6 +284,23 @@ export async function executeQuery(req: Request, res: Response, next: NextFuncti
       data: resultData,
       stats,
       breakdown: syntaxBreakdown,
+      historyItem: {
+        id: historyId,
+        userId: req.user!.userId,
+        workspaceId: vdb.workspaceId,
+        databaseId: vdb.id,
+        collection: collectionName,
+        rawQuery: rawQuery || JSON.stringify(queryToRun),
+        operation: queryToRun.operation,
+        durationMs,
+        executionTimeMs: durationMs,
+        documentsReturned: documentsCount,
+        documentsCount,
+        success: true,
+        status: 'success',
+        timestamp: nowIso,
+        createdAt: nowIso,
+      },
     };
 
     const response: ApiResponse<QueryResult> = {
@@ -270,21 +313,29 @@ export async function executeQuery(req: Request, res: Response, next: NextFuncti
     const durationMs = Date.now() - startTime;
     // Log failed query to history
     if (req.user) {
-      getPlatformDb()
+      const errNowIso = new Date().toISOString();
+      await getPlatformDb()
         .collection('query_history')
         .insertOne({
           id: `qh_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           userId: req.user.userId,
-          databaseId: targetDbId,
-          collection: collectionName,
+          databaseId: targetDbId || 'default',
+          collection: collectionName || 'default',
+          collectionName: collectionName || 'default',
           rawQuery,
           operation: 'find',
+          executionTimeMs: durationMs,
           durationMs,
           documentsReturned: 0,
+          documentsCount: 0,
+          documentsAffected: 0,
+          status: 'error',
           success: false,
           errorCode: err.code || 'INVALID_QUERY',
           errorMessage: err.message,
-          timestamp: new Date().toISOString(),
+          createdAt: errNowIso,
+          timestamp: errNowIso,
+          executedAt: errNowIso,
         })
         .catch(() => {});
     }
@@ -292,6 +343,68 @@ export async function executeQuery(req: Request, res: Response, next: NextFuncti
     if (err.message && err.message.includes('execution exceeded time limit')) {
       return next(new ExecutionTimeoutError(config.sandbox.maxQueryExecutionMs));
     }
+    next(err);
+  }
+}
+
+export async function analyzeQuery(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { rawQuery, databaseId, collection } = req.body;
+    if (!rawQuery || typeof rawQuery !== 'string' || !rawQuery.trim()) {
+      res.json({
+        success: true,
+        data: { breakdown: [], normalized: null, error: null },
+        error: null,
+      });
+      return;
+    }
+
+    try {
+      const parsed = parseMqlQuery(rawQuery.trim(), databaseId || 'default', collection || 'students');
+      res.json({
+        success: true,
+        data: {
+          breakdown: parsed.breakdown,
+          normalized: parsed.normalized,
+          error: null,
+        },
+        error: null,
+      });
+    } catch (parseErr: any) {
+      // Incomplete syntax or parser error during typing: return graceful feedback without 400 crash
+      res.json({
+        success: true,
+        data: {
+          breakdown: [],
+          normalized: null,
+          error: parseErr.message,
+        },
+        error: null,
+      });
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getPlaygroundStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const serverVersion = await getMongoServerVersion();
+    res.json({
+      success: true,
+      data: {
+        serverVersion,
+        storageEngine: 'WiredTiger',
+        status: 'connected',
+        limits: {
+          maxQueryExecutionMs: config.sandbox.maxQueryExecutionMs,
+          maxResultDocuments: config.sandbox.maxResultDocuments,
+          maxDocumentSizeBytes: config.sandbox.maxDocumentSizeBytes,
+        },
+      },
+      error: null,
+    });
+  } catch (err) {
     next(err);
   }
 }
