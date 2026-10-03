@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { getPlatformDb, getMongoClient, getMongoServerVersion } from '../../database/mongoClient';
 import { ApiResponse, UserRole } from '@datachan/shared-types';
-import { ResourceNotFoundError, InvalidRequestError } from '../../errors';
+import { ResourceNotFoundError, InvalidRequestError, AuthorizationError } from '../../errors';
 import { getFirebaseAuth } from '../../security/firebaseAdmin';
 import { logSecurityEvent } from '../../security/audit';
 
@@ -98,14 +98,18 @@ export async function updateUserRole(req: Request, res: Response, next: NextFunc
       throw new InvalidRequestError('Valid role (student, faculty, admin) is required');
     }
 
-    if (userId === req.user!.userId && role !== 'admin') {
-      throw new InvalidRequestError('Administrators cannot revoke their own admin privileges directly');
-    }
-
     const db = getPlatformDb();
     const targetUser = await db.collection('users').findOne({ id: userId });
     if (!targetUser) {
       throw new ResourceNotFoundError('User', userId);
+    }
+
+    if (userId === req.user!.userId) {
+      throw new AuthorizationError('Administrators cannot modify their own role');
+    }
+
+    if (targetUser.role === 'admin') {
+      throw new AuthorizationError('Administrators cannot modify the role of another administrator');
     }
 
     // Last-Active-Admin Protection: Prevent demoting the last active administrator
@@ -126,12 +130,11 @@ export async function updateUserRole(req: Request, res: Response, next: NextFunc
         { returnDocument: 'after' }
       );
 
-    // Propagate new role to Firebase Custom Claims and revoke old refresh tokens
+    // Propagate new role to Firebase Custom Claims
     if (targetUser.firebaseUid) {
       try {
         const auth = getFirebaseAuth();
         await auth.setCustomUserClaims(targetUser.firebaseUid, { role });
-        await auth.revokeRefreshTokens(targetUser.firebaseUid);
       } catch (claimErr: any) {
         // Log warning if Firebase connection isn't available, MongoDB remains authoritative
       }
