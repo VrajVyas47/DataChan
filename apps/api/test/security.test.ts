@@ -566,6 +566,99 @@ describe('Comprehensive Security Test Suite', () => {
       expect(insertedDoc.email).toBe('brandnew@datachan.org');
       expect(res.cookie).toHaveBeenCalled();
     });
+
+    it('provisions new user with photoUrl when Firebase token contains picture', async () => {
+      const req = {
+        body: {
+          idToken: 'token_with_picture',
+          displayName: 'Picture Student',
+        },
+        ip: '127.0.0.1',
+      } as unknown as Request;
+
+      const res = {
+        cookie: vi.fn(),
+        json: vi.fn(),
+      } as unknown as Response;
+      const next = vi.fn();
+
+      mockAuth.verifyIdToken.mockResolvedValue({
+        uid: 'fb_pic_uid',
+        email: 'picstudent@datachan.org',
+        name: 'Picture Student',
+        picture: 'https://cdn.datachan.org/avatars/picstudent.png',
+        email_verified: true,
+        auth_time: Math.floor(Date.now() / 1000),
+      });
+
+      mockAuth.createSessionCookie = vi.fn().mockResolvedValue('session_cookie_pic');
+      mockUsersCollection.findOne.mockImplementation(() => {
+        if (mockUsersCollection.insertOne.mock.calls.length > 0) {
+          return Promise.resolve({
+            id: 'usr_pic',
+            role: 'student',
+            status: 'active',
+            email: 'picstudent@datachan.org',
+            photoUrl: 'https://cdn.datachan.org/avatars/picstudent.png',
+          });
+        }
+        return Promise.resolve(null);
+      });
+      mockUsersCollection.insertOne.mockResolvedValue({ acknowledged: true });
+
+      await authController.createSession(req, res, next);
+
+      expect(mockUsersCollection.insertOne).toHaveBeenCalledTimes(1);
+      const insertedDoc = mockUsersCollection.insertOne.mock.calls[0][0];
+      expect(insertedDoc.photoUrl).toBe('https://cdn.datachan.org/avatars/picstudent.png');
+      expect(typeof insertedDoc.photoUrl).toBe('string');
+    });
+
+    it('provisions new user omitting photoUrl entirely when Firebase token lacks picture', async () => {
+      const req = {
+        body: {
+          idToken: 'token_without_picture',
+          displayName: 'No Picture Student',
+        },
+        ip: '127.0.0.1',
+      } as unknown as Request;
+
+      const res = {
+        cookie: vi.fn(),
+        json: vi.fn(),
+      } as unknown as Response;
+      const next = vi.fn();
+
+      mockAuth.verifyIdToken.mockResolvedValue({
+        uid: 'fb_nopic_uid',
+        email: 'nopic@datachan.org',
+        name: 'No Picture Student',
+        picture: undefined,
+        email_verified: true,
+        auth_time: Math.floor(Date.now() / 1000),
+      });
+
+      mockAuth.createSessionCookie = vi.fn().mockResolvedValue('session_cookie_nopic');
+      mockUsersCollection.findOne.mockImplementation(() => {
+        if (mockUsersCollection.insertOne.mock.calls.length > 0) {
+          return Promise.resolve({
+            id: 'usr_nopic',
+            role: 'student',
+            status: 'active',
+            email: 'nopic@datachan.org',
+          });
+        }
+        return Promise.resolve(null);
+      });
+      mockUsersCollection.insertOne.mockResolvedValue({ acknowledged: true });
+
+      await authController.createSession(req, res, next);
+
+      expect(mockUsersCollection.insertOne).toHaveBeenCalledTimes(1);
+      const insertedDoc = mockUsersCollection.insertOne.mock.calls[0][0];
+      expect('photoUrl' in insertedDoc).toBe(false);
+      expect(insertedDoc.photoUrl).toBeUndefined();
+    });
   });
 
   describe('4b. Token Freshness, Account Takeover Protection & Concurrency', () => {

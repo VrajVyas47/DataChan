@@ -60,6 +60,21 @@ describe('DATA-CHAN V1 Canonical Database Schema & Layer Tests', () => {
       expect(userSchema.properties.email.pattern).toBeDefined();
     });
 
+    it('enforces photoUrl as optional bsonType "string" without null in users validator', () => {
+      const userSchema = COLLECTION_VALIDATORS.users.validator.$jsonSchema;
+      expect(userSchema.properties.photoUrl).toEqual({ bsonType: 'string' });
+      expect(userSchema.required).not.toContain('photoUrl');
+    });
+
+    it('enforces claimedRewardKeys as optional bsonType "array" in users validator', () => {
+      const userSchema = COLLECTION_VALIDATORS.users.validator.$jsonSchema;
+      expect(userSchema.properties.claimedRewardKeys).toEqual({
+        bsonType: 'array',
+        description: 'Idempotency ledger of applied reward keys for this user',
+      });
+      expect(userSchema.required).not.toContain('claimedRewardKeys');
+    });
+
     it('enforces status enum [active, archived, deleted] on virtual_databases validator', () => {
       const vdbSchema = COLLECTION_VALIDATORS.virtual_databases.validator.$jsonSchema;
       expect(vdbSchema.properties.status.enum).toEqual(['active', 'archived', 'deleted']);

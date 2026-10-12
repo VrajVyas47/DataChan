@@ -47,6 +47,7 @@ export interface User {
   activeCollectionName?: string;
   themePreference?: ThemeId;
   enrolledClassroomIds?: string[];
+  claimedRewardKeys?: string[];
   createdAt: string;
   updatedAt: string;
   lastLoginAt?: string;
@@ -651,6 +652,48 @@ export interface ForumStats {
   totalContributors: number;
   solvedCount?: number;
   topTags: { tag: string; count: number }[];
+}// ----------------------------------------------------------------------------
+// Games & Detective Mystery Engine
+// ----------------------------------------------------------------------------
+export interface GameChapter {
+  id: string;
+  gameId: string;
+  order: number;
+  title: string;
+  story: string;
+  objective: string;
+  challengeId: string;
 }
 
+export interface GameMetadata {
+  id: string;
+  title: string;
+  slug: string;
+  description: string;
+  type: string;
+  difficulty: string;
+  status: 'draft' | 'published';
+  chapters?: GameChapter[];
+}
 
+export interface GameProgress {
+  id: string;
+  userId: string;
+  gameId: string;
+  currentChapter: string;
+  completedChallenges: string[];
+  discoveredEvidence: string[];
+  discoveredClues: string[];
+  status: 'not_started' | 'in_progress' | 'completed';
+  sandboxId: string;
+  startedAt: string;
+  updatedAt: string;
+}
+
+export interface GameValidationResult {
+  solved: boolean;
+  clue?: string;
+  nextChapter?: string;
+  message: string;
+  xpAwarded: number;
+}

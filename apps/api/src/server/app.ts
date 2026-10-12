@@ -21,6 +21,7 @@ import dataModelRoutes from '../modules/data-models/dataModelRoutes';
 import forumRoutes from '../modules/forum/forumRoutes';
 import classroomRoutes from '../modules/classrooms/classroomRoutes';
 import adminRoutes from '../modules/admin/adminRoutes';
+import gamesRoutes from '../modules/games/gamesRoutes';
 import { errorHandler } from '../middleware/errorHandler';
 import { AuthorizationError } from '../errors';
 
@@ -138,6 +139,7 @@ export function createApp(): express.Application {
   v1.use('/forum', forumRoutes);
   v1.use('/classrooms', classroomRoutes);
   v1.use('/admin', adminRoutes);
+  v1.use('/games', gamesRoutes);
 
   app.use('/api/v1', v1);
 

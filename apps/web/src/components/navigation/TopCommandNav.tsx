@@ -34,6 +34,7 @@ import {
   MessagesSquare,
   Shield,
   FileEdit,
+  Search,
 } from 'lucide-react';
 
 export function TopCommandNav() {
@@ -239,6 +240,7 @@ export function TopCommandNav() {
     { label: 'Challenges', href: '/challenges', icon: Trophy },
     { label: 'Data Modeler', href: '/modeler', icon: Boxes },
     { label: 'Forum', href: '/forum', icon: MessagesSquare },
+    { label: 'Games', href: '/games', icon: Search },
   ];
 
   const colorPresets = [

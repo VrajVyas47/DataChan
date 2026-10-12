@@ -166,5 +166,44 @@ describe('Development Role Seed Schema Validation & Error Formatting', () => {
       expect(result.valid).toBe(false);
       expect(result.errors.some((e) => e.includes('userId'))).toBe(true);
     });
+
+    it('validates photoUrl behavior: optional valid string passes, missing passes, explicit null or number fails', () => {
+      const baseUser = {
+        id: 'usr_photo_test',
+        firebaseUid: 'fb_photo_test',
+        email: 'phototest@datachan.test',
+        role: 'student',
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // 1. Omitted photoUrl should pass (optional)
+      const resOmitted = preflightValidateSeedDocument('users', { ...baseUser });
+      expect(resOmitted.valid).toBe(true);
+
+      // 2. Valid string photoUrl should pass
+      const resString = preflightValidateSeedDocument('users', {
+        ...baseUser,
+        photoUrl: 'https://cdn.datachan.org/photos/avatar.png',
+      });
+      expect(resString.valid).toBe(true);
+
+      // 3. Explicit null photoUrl should fail (bsonType is 'string', null not permitted)
+      const resNull = preflightValidateSeedDocument('users', {
+        ...baseUser,
+        photoUrl: null,
+      });
+      expect(resNull.valid).toBe(false);
+      expect(resNull.errors.some((e) => e.includes('photoUrl') && e.includes('null'))).toBe(true);
+
+      // 4. Non-string photoUrl should fail
+      const resNumber = preflightValidateSeedDocument('users', {
+        ...baseUser,
+        photoUrl: 12345,
+      });
+      expect(resNumber.valid).toBe(false);
+      expect(resNumber.errors.some((e) => e.includes('photoUrl'))).toBe(true);
+    });
   });
 });

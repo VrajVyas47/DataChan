@@ -35,6 +35,7 @@ export const COLLECTION_VALIDATORS: Record<string, { validator: { $jsonSchema: R
           level: { bsonType: ['int', 'double', 'long'] },
           streakDays: { bsonType: ['int', 'double', 'long'] },
           enrolledClassroomIds: { bsonType: 'array' },
+          claimedRewardKeys: { bsonType: 'array', description: 'Idempotency ledger of applied reward keys for this user' },
           createdAt: { bsonType: ['string', 'date'] },
           updatedAt: { bsonType: ['string', 'date'] },
           lastLoginAt: { bsonType: ['string', 'date'] },

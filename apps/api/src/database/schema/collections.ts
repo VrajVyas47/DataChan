@@ -50,6 +50,7 @@ export interface CanonicalUser {
   level?: number;
   streakDays?: number;
   enrolledClassroomIds?: string[];
+  claimedRewardKeys?: string[];
   createdAt: string;
   updatedAt: string;
   lastLoginAt?: string;

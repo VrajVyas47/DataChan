@@ -690,6 +690,36 @@ class ApiClient {
       method: 'POST',
     });
   }
+  // --- Games ---
+  async listGames(): Promise<any[]> {
+    return this.request<any[]>('/games');
+  }
+
+  async getGame(id: string): Promise<any> {
+    return this.request<any>(`/games/${id}`);
+  }
+
+  async startGame(id: string): Promise<any> {
+    return this.request<any>(`/games/${id}/start`, { method: 'POST' });
+  }
+
+  async getGameProgress(id: string): Promise<any> {
+    return this.request<any>(`/games/${id}/progress`);
+  }
+
+  async runGameQuery(id: string, challengeId: string, query: string): Promise<any> {
+    return this.request<any>(`/games/${id}/query`, {
+      method: 'POST',
+      body: JSON.stringify({ challengeId, query }),
+    });
+  }
+
+  async validateGameChallenge(id: string, challengeId: string, query: string, result: any): Promise<any> {
+    return this.request<any>(`/games/${id}/challenges/${challengeId}/validate`, {
+      method: 'POST',
+      body: JSON.stringify({ query, result }),
+    });
+  }
 }
 
 export const api = new ApiClient();

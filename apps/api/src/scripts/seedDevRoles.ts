@@ -128,7 +128,19 @@ export function preflightValidateSeedDocument(
   if (schemaDef.properties) {
     for (const [propName, propDef] of Object.entries<any>(schemaDef.properties)) {
       const val = doc[propName];
-      if (val === undefined || val === null) continue;
+      if (val === undefined) continue;
+
+      if (val === null) {
+        if (propDef.bsonType) {
+          const types = Array.isArray(propDef.bsonType) ? propDef.bsonType : [propDef.bsonType];
+          if (!types.includes('null')) {
+            errors.push(
+              `Property '${propName}' is null but collection '${collectionName}' schema requires bsonType [${types.join(', ')}]`
+            );
+          }
+        }
+        continue;
+      }
 
       // Enum check
       if (Array.isArray(propDef.enum) && !propDef.enum.includes(val)) {
